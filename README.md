@@ -263,5 +263,3 @@ https://img.shields.io/github/stars/VOLTRON-TECH-X/VOLTRON-TECH-X.svg?style=soci
 ---
 
 Made with 🔥 by Voltron Tech
-
-```

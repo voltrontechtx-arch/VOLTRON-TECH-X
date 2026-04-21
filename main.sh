@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # ========== VOLTRON TECH ULTIMATE SCRIPT ==========
-# Version: 10.4 (FALCON STYLE - FULLY FIXED)
+# Version: 10.5 (FALCON STYLE - ALL LINUX DISTROS SUPPORTED)
 # Description: SSH • DNSTT • V2RAY • BADVPN • UDP • SSL • ZiVPN
 # Author: Voltron Tech
+# Supported: Ubuntu 20.04-24.10 • Debian 10-12 • CentOS 7-9 • Fedora 36-39 • RHEL 8-9
 
 # ========== COLOR CODES ==========
 C_RESET='\033[0m'
@@ -114,6 +115,17 @@ SELECTED_USER=""
 SELECTED_USERS=()
 UNINSTALL_MODE="interactive"
 
+# OS Detection Variables
+OS=""
+OS_VERSION=""
+OS_NAME=""
+UBUNTU_MAJOR=""
+PKG_MANAGER=""
+PKG_UPDATE=""
+PKG_INSTALL=""
+PKG_REMOVE=""
+PKG_CLEAN=""
+
 # ========== CREATE DIRECTORIES ==========
 create_directories() {
     echo -e "${C_BLUE}📁 Creating directories...${C_RESET}"
@@ -133,7 +145,34 @@ LOCATION_CACHE_FILE="$DB_DIR/cache/location"
 ISP_CACHE_FILE="$DB_DIR/cache/isp"
 mkdir -p "$DB_DIR/cache"
 
-# ========== SYSTEM DETECTION ==========
+# ========== OS AND SYSTEM DETECTION ==========
+detect_os_version() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS=$ID
+        OS_VERSION=$VERSION_ID
+        OS_NAME=$PRETTY_NAME
+    else
+        OS=$(uname -s)
+        OS_VERSION=$(uname -r)
+        OS_NAME="$OS $OS_VERSION"
+    fi
+    
+    # Extract major version for Ubuntu
+    if [[ "$OS" == "ubuntu" ]]; then
+        UBUNTU_MAJOR=$(echo "$OS_VERSION" | cut -d. -f1)
+        echo -e "${C_GREEN}✅ Detected Ubuntu $OS_VERSION (Major: $UBUNTU_MAJOR)${C_RESET}"
+    elif [[ "$OS" == "debian" ]]; then
+        echo -e "${C_GREEN}✅ Detected Debian $OS_VERSION${C_RESET}"
+    elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]]; then
+        echo -e "${C_GREEN}✅ Detected $OS_NAME${C_RESET}"
+    elif [[ "$OS" == "fedora" ]]; then
+        echo -e "${C_GREEN}✅ Detected Fedora $OS_VERSION${C_RESET}"
+    else
+        echo -e "${C_YELLOW}⚠️ Detected $OS_NAME - compatibility mode${C_RESET}"
+    fi
+}
+
 detect_package_manager() {
     if command -v apt &>/dev/null; then
         PKG_MANAGER="apt"
@@ -183,18 +222,82 @@ detect_firewall() {
     echo -e "${C_GREEN}✅ Detected firewall: $FIREWALL${C_RESET}"
 }
 
-detect_os() {
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        OS=$ID
-        OS_VERSION=$VERSION_ID
-        OS_NAME=$PRETTY_NAME
-    else
-        OS=$(uname -s)
-        OS_VERSION=$(uname -r)
-        OS_NAME="$OS $OS_VERSION"
+install_dependencies() {
+    echo -e "${C_BLUE}📦 Installing required dependencies...${C_RESET}"
+    
+    # Core dependencies for all distributions
+    local core_deps="curl wget bc"
+    
+    # Add iptables to dependencies
+    core_deps="$core_deps iptables"
+    
+    # Additional dependencies for older Ubuntu versions
+    if [[ "$OS" == "ubuntu" ]] && [[ "$UBUNTU_MAJOR" -le 20 ]]; then
+        echo -e "${C_YELLOW}ℹ️ Ubuntu $OS_VERSION detected - installing legacy compatibility packages...${C_RESET}"
+        core_deps="$core_deps net-tools"
     fi
-    echo -e "${C_GREEN}✅ Detected OS: $OS_NAME${C_RESET}"
+    
+    if [ "$PKG_MANAGER" = "apt" ]; then
+        $PKG_UPDATE > /dev/null 2>&1
+        $PKG_INSTALL $core_deps > /dev/null 2>&1
+    elif [ "$PKG_MANAGER" = "dnf" ] || [ "$PKG_MANAGER" = "yum" ]; then
+        $PKG_INSTALL $core_deps > /dev/null 2>&1
+    fi
+    
+    echo -e "${C_GREEN}✅ Dependencies installed${C_RESET}"
+}
+
+# ========== INSTALL IPTABLES IF NOT PRESENT (ALL DISTROS) ==========
+ensure_iptables() {
+    # For Ubuntu 22.04+, iptables might be replaced with iptables-nft
+    if [[ "$OS" == "ubuntu" ]] && [[ "$UBUNTU_MAJOR" -ge 22 ]]; then
+        if ! command -v iptables &> /dev/null; then
+            echo -e "${C_YELLOW}⚠️ iptables not found. Installing iptables (nft backend)...${C_RESET}"
+            if [ "$PKG_MANAGER" = "apt" ]; then
+                $PKG_UPDATE > /dev/null 2>&1
+                $PKG_INSTALL iptables iptables-persistent > /dev/null 2>&1
+            fi
+        fi
+        # Create symlink if iptables-nft exists but iptables doesn't
+        if ! command -v iptables &> /dev/null && command -v iptables-nft &> /dev/null; then
+            ln -sf /usr/sbin/iptables-nft /usr/sbin/iptables 2>/dev/null
+            echo -e "${C_GREEN}✅ Created symlink for iptables using nft backend${C_RESET}"
+        fi
+    elif [[ "$OS" == "debian" ]] && [[ "$OS_VERSION" -ge 12 ]]; then
+        # Debian 12+ also uses nftables
+        if ! command -v iptables &> /dev/null; then
+            echo -e "${C_YELLOW}⚠️ iptables not found. Installing...${C_RESET}"
+            if [ "$PKG_MANAGER" = "apt" ]; then
+                $PKG_UPDATE > /dev/null 2>&1
+                $PKG_INSTALL iptables > /dev/null 2>&1
+            fi
+        fi
+    else
+        # For older Ubuntu versions (20.04 and below) and other distros
+        if ! command -v iptables &> /dev/null; then
+            echo -e "${C_YELLOW}⚠️ iptables not found. Installing...${C_RESET}"
+            if [ "$PKG_MANAGER" = "apt" ]; then
+                $PKG_UPDATE > /dev/null 2>&1
+                $PKG_INSTALL iptables > /dev/null 2>&1
+            elif [ "$PKG_MANAGER" = "yum" ]; then
+                $PKG_INSTALL iptables > /dev/null 2>&1
+            elif [ "$PKG_MANAGER" = "dnf" ]; then
+                $PKG_INSTALL iptables > /dev/null 2>&1
+            else
+                echo -e "${C_RED}❌ Cannot install iptables automatically. Please install manually.${C_RESET}"
+                return 1
+            fi
+        fi
+    fi
+    
+    # Final verification
+    if command -v iptables &> /dev/null; then
+        echo -e "${C_GREEN}✅ iptables is ready${C_RESET}"
+        return 0
+    else
+        echo -e "${C_RED}❌ iptables could not be installed. Please run: apt install iptables${C_RESET}"
+        return 1
+    fi
 }
 
 # ========== GET IP, LOCATION, ISP ==========
@@ -309,7 +412,7 @@ show_banner() {
     local current_mtu=$(get_current_mtu)
     
     echo -e "${C_BOLD}${C_PURPLE}╔═══════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_PURPLE}║           🔥 VOLTRON TECH ULTIMATE v10.4 🔥                    ║${C_RESET}"
+    echo -e "${C_BOLD}${C_PURPLE}║           🔥 VOLTRON TECH ULTIMATE v10.5 🔥                    ║${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}║        SSH • DNSTT • V2RAY • BADVPN • UDP • SSL • ZiVPN        ║${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}║                   FALCON STYLE EDITION                         ║${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}╠═══════════════════════════════════════════════════════════════╣${C_RESET}"
@@ -317,6 +420,7 @@ show_banner() {
     echo -e "${C_BOLD}${C_PURPLE}║  Location:  ${C_GREEN}$LOCATION, $COUNTRY${C_PURPLE}${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}║  ISP:       ${C_GREEN}$ISP${C_PURPLE}${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}║  Current MTU: ${C_GREEN}$current_mtu${C_PURPLE}${C_RESET}"
+    echo -e "${C_BOLD}${C_PURPLE}║  OS:        ${C_GREEN}$OS_NAME${C_PURPLE}${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}║  ULTRA BOOST: ${C_GREEN}ACTIVE (10x speed mode)${C_PURPLE}${C_RESET}"
     
     if [ -f "$FORCER_CONFIG" ]; then
@@ -794,11 +898,18 @@ mtu_selection_during_install() {
     echo "$MTU" > "$CONFIG_DIR/mtu"
 }
 
-# ========== FIREWALL CONFIGURATION ==========
+# ========== FIREWALL CONFIGURATION (WITH IPTABLES CHECK) ==========
 configure_firewall() {
     echo -e "\n${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
     echo -e "${C_BLUE}           🔥 FIREWALL CONFIGURATION${C_RESET}"
     echo -e "${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
+    
+    # Ensure iptables is installed
+    if ! ensure_iptables; then
+        echo -e "${C_RED}❌ Cannot proceed without iptables${C_RESET}"
+        echo -e "${C_YELLOW}Please install iptables manually and try again.${C_RESET}"
+        return 1
+    fi
     
     echo -e "${C_GREEN}[1/5] Disabling UFW if present...${C_RESET}"
     if command -v ufw &> /dev/null; then
@@ -851,6 +962,7 @@ EOF
     fi
     
     echo -e "\n${C_GREEN}✅ Firewall configured${C_RESET}"
+    return 0
 }
 
 # ========== DNSTT SERVICE (LIVE MODE - NO AUTO-RESTART) ==========
@@ -3321,10 +3433,11 @@ EOF
 initial_setup() {
     echo -e "\n${C_BLUE}🔧 Running initial system setup...${C_RESET}"
     
-    detect_os
+    detect_os_version
     detect_package_manager
     detect_service_manager
     detect_firewall
+    install_dependencies
     
     create_directories
     create_limiter_service
@@ -3438,7 +3551,10 @@ install_dnstt_falcon() {
     
     # Step 3: Configure firewall
     echo -e "\n${C_BLUE}[3/8] Configuring firewall...${C_RESET}"
-    configure_firewall
+    if ! configure_firewall; then
+        echo -e "${C_RED}❌ Firewall configuration failed${C_RESET}"
+        return 1
+    fi
     
     # Step 4: Setup domain
     echo -e "\n${C_BLUE}[4/8] Domain configuration...${C_RESET}"

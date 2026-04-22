@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# ========== VOLTRON TECH ULTIMATE - CONTAINER EDITION ==========
-# Version: 10.6 (NO SYSTEMD - FOR CONTAINERS)
+# ========== VOLTRON TECH ULTIMATE SCRIPT ==========
+# Version: 10.8 (FALCON BANNER + WELCOME + WHATSAPP)
 # Description: SSH • DNSTT • V2RAY • BADVPN • UDP • SSL • ZiVPN
 # Author: Voltron Tech
-# Compatible: LXC, Docker, OpenVZ, and other container environments
+# Supported: Ubuntu 20.04-24.10 • Debian 10-12 • CentOS 7-9 • Fedora 36-40
 
 # ========== COLOR CODES ==========
 C_RESET='\033[0m'
@@ -43,7 +43,6 @@ SSH_BANNER_FILE="/etc/voltrontech/banner"
 TRAFFIC_DIR="$DB_DIR/traffic"
 BANNER_DIR="$DB_DIR/banners"
 BANDWIDTH_DIR="$DB_DIR/bandwidth"
-PID_DIR="$DB_DIR/pids"
 
 # DNS Protocols Directories
 DNSTT_KEYS_DIR="$DB_DIR/dnstt"
@@ -66,36 +65,30 @@ LOGS_DIR="$DB_DIR/logs"
 CONFIG_DIR="$DB_DIR/config"
 FEC_DIR="$DB_DIR/fec"
 
-# PID Files (for container without systemd)
-DNSTT_PID_FILE="$PID_DIR/dnstt.pid"
-V2RAY_PID_FILE="$PID_DIR/v2ray.pid"
-BADVPN_PID_FILE="$PID_DIR/badvpn.pid"
-UDP_CUSTOM_PID_FILE="$PID_DIR/udp-custom.pid"
-HAPROXY_PID_FILE="$PID_DIR/haproxy.pid"
-VOLTRONPROXY_PID_FILE="$PID_DIR/voltronproxy.pid"
-ZIVPN_PID_FILE="$PID_DIR/zivpn.pid"
-LIMITER_PID_FILE="$PID_DIR/limiter.pid"
-TRAFFIC_PID_FILE="$PID_DIR/traffic.pid"
-
 # ========== CONNECTION FORCER CONFIG ==========
 FORCER_DIR="$DB_DIR/forcer"
 FORCER_CONFIG="$FORCER_DIR/config.conf"
+FORCER_HAPROXY_CFG="/etc/haproxy/haproxy.cfg"
+FORCER_BACKUP_DIR="$FORCER_DIR/backups"
 
 # ========== CACHE CLEANER CONFIG ==========
 CACHE_CRON_FILE="/etc/cron.d/voltron-cache-clean"
 CACHE_LOG_FILE="/var/log/voltron-cache.log"
+CACHE_STATUS_FILE="$DB_DIR/cache/status"
 CACHE_SCRIPT="/usr/local/bin/voltron-cache-clean"
 
-# Service Scripts (instead of systemd)
-DNSTT_SERVICE_SCRIPT="$DB_DIR/services/dnstt.sh"
-V2RAY_SERVICE_SCRIPT="$DB_DIR/services/v2ray.sh"
-BADVPN_SERVICE_SCRIPT="$DB_DIR/services/badvpn.sh"
-UDP_CUSTOM_SERVICE_SCRIPT="$DB_DIR/services/udp-custom.sh"
-HAPROXY_SERVICE_SCRIPT="$DB_DIR/services/haproxy.sh"
-VOLTRONPROXY_SERVICE_SCRIPT="$DB_DIR/services/voltronproxy.sh"
-ZIVPN_SERVICE_SCRIPT="$DB_DIR/services/zivpn.sh"
-LIMITER_SERVICE_SCRIPT="$DB_DIR/services/limiter.sh"
-TRAFFIC_SERVICE_SCRIPT="$DB_DIR/services/traffic.sh"
+# Service Files
+DNSTT_SERVICE="/etc/systemd/system/dnstt.service"
+V2RAY_SERVICE="/etc/systemd/system/v2ray-dnstt.service"
+BADVPN_SERVICE="/etc/systemd/system/badvpn.service"
+UDP_CUSTOM_SERVICE="/etc/systemd/system/udp-custom.service"
+HAPROXY_CONFIG="/etc/haproxy/haproxy.cfg"
+NGINX_CONFIG="/etc/nginx/sites-available/default"
+VOLTRONPROXY_SERVICE="/etc/systemd/system/voltronproxy.service"
+ZIVPN_SERVICE="/etc/systemd/system/zivpn.service"
+LIMITER_SERVICE="/etc/systemd/system/voltrontech-limiter.service"
+TRAFFIC_SERVICE="/etc/systemd/system/voltron-traffic.service"
+LOSS_PROTECT_SERVICE="/etc/systemd/system/voltron-loss-protect.service"
 
 # Binary Locations
 DNSTT_SERVER="/usr/local/bin/dnstt-server"
@@ -107,6 +100,7 @@ VOLTRONPROXY_BIN="/usr/local/bin/voltronproxy"
 ZIVPN_BIN="/usr/local/bin/zivpn"
 LIMITER_SCRIPT="/usr/local/bin/voltrontech-limiter.sh"
 TRAFFIC_SCRIPT="/usr/local/bin/voltron-traffic.sh"
+LOSS_PROTECT_SCRIPT="/usr/local/bin/voltron-loss-protect"
 
 # Ports
 DNS_PORT=53
@@ -135,8 +129,7 @@ PKG_CLEAN=""
 # ========== CREATE DIRECTORIES ==========
 create_directories() {
     echo -e "${C_BLUE}📁 Creating directories...${C_RESET}"
-    mkdir -p $DB_DIR $DNSTT_KEYS_DIR $V2RAY_KEYS_DIR $V2RAY_DIR $BACKUP_DIR $LOGS_DIR $CONFIG_DIR $SSL_CERT_DIR $FEC_DIR $TRAFFIC_DIR $BANNER_DIR $BANDWIDTH_DIR $PID_DIR
-    mkdir -p $DB_DIR/services
+    mkdir -p $DB_DIR $DNSTT_KEYS_DIR $V2RAY_KEYS_DIR $V2RAY_DIR $BACKUP_DIR $LOGS_DIR $CONFIG_DIR $SSL_CERT_DIR $FEC_DIR $TRAFFIC_DIR $BANNER_DIR $BANDWIDTH_DIR
     mkdir -p $V2RAY_DIR/dnstt $V2RAY_DIR/v2ray $V2RAY_DIR/users
     mkdir -p $UDP_CUSTOM_DIR $ZIVPN_DIR
     mkdir -p $(dirname "$SSH_BANNER_FILE")
@@ -170,8 +163,12 @@ detect_os_version() {
         echo -e "${C_GREEN}✅ Detected Ubuntu $OS_VERSION (Major: $UBUNTU_MAJOR)${C_RESET}"
     elif [[ "$OS" == "debian" ]]; then
         echo -e "${C_GREEN}✅ Detected Debian $OS_VERSION${C_RESET}"
+    elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]]; then
+        echo -e "${C_GREEN}✅ Detected $OS_NAME${C_RESET}"
+    elif [[ "$OS" == "fedora" ]]; then
+        echo -e "${C_GREEN}✅ Detected Fedora $OS_VERSION${C_RESET}"
     else
-        echo -e "${C_YELLOW}⚠️ Detected $OS_NAME${C_RESET}"
+        echo -e "${C_YELLOW}⚠️ Detected $OS_NAME - compatibility mode${C_RESET}"
     fi
 }
 
@@ -201,6 +198,29 @@ detect_package_manager() {
     echo -e "${C_GREEN}✅ Detected package manager: $PKG_MANAGER${C_RESET}"
 }
 
+detect_service_manager() {
+    if command -v systemctl &>/dev/null; then
+        SERVICE_MANAGER="systemd"
+    else
+        echo -e "${C_RED}❌ systemd not found!${C_RESET}"
+        exit 1
+    fi
+    echo -e "${C_GREEN}✅ Detected service manager: $SERVICE_MANAGER${C_RESET}"
+}
+
+detect_firewall() {
+    if command -v ufw &>/dev/null && ufw status | grep -q "active"; then
+        FIREWALL="ufw"
+    elif command -v firewall-cmd &>/dev/null && systemctl is-active firewalld &>/dev/null; then
+        FIREWALL="firewalld"
+    elif command -v iptables &>/dev/null; then
+        FIREWALL="iptables"
+    else
+        FIREWALL="none"
+    fi
+    echo -e "${C_GREEN}✅ Detected firewall: $FIREWALL${C_RESET}"
+}
+
 install_dependencies() {
     echo -e "${C_BLUE}📦 Installing required dependencies...${C_RESET}"
     
@@ -228,12 +248,20 @@ ensure_iptables() {
             echo -e "${C_YELLOW}⚠️ iptables not found. Installing iptables (nft backend)...${C_RESET}"
             if [ "$PKG_MANAGER" = "apt" ]; then
                 $PKG_UPDATE > /dev/null 2>&1
-                $PKG_INSTALL iptables > /dev/null 2>&1
+                $PKG_INSTALL iptables iptables-persistent > /dev/null 2>&1
             fi
         fi
         if ! command -v iptables &> /dev/null && command -v iptables-nft &> /dev/null; then
             ln -sf /usr/sbin/iptables-nft /usr/sbin/iptables 2>/dev/null
             echo -e "${C_GREEN}✅ Created symlink for iptables using nft backend${C_RESET}"
+        fi
+    elif [[ "$OS" == "debian" ]] && [[ "$OS_VERSION" -ge 12 ]]; then
+        if ! command -v iptables &> /dev/null; then
+            echo -e "${C_YELLOW}⚠️ iptables not found. Installing...${C_RESET}"
+            if [ "$PKG_MANAGER" = "apt" ]; then
+                $PKG_UPDATE > /dev/null 2>&1
+                $PKG_INSTALL iptables > /dev/null 2>&1
+            fi
         fi
     else
         if ! command -v iptables &> /dev/null; then
@@ -257,77 +285,6 @@ ensure_iptables() {
         return 0
     else
         echo -e "${C_RED}❌ iptables could not be installed.${C_RESET}"
-        return 1
-    fi
-}
-
-# ========== SERVICE MANAGEMENT FUNCTIONS (NO SYSTEMD) ==========
-start_service() {
-    local name=$1
-    local command=$2
-    local pid_file=$3
-    local log_file="$LOGS_DIR/${name}.log"
-    
-    if [ -f "$pid_file" ] && kill -0 $(cat "$pid_file") 2>/dev/null; then
-        echo -e "${C_YELLOW}⚠️ $name is already running${C_RESET}"
-        return 0
-    fi
-    
-    echo -e "${C_GREEN}▶️ Starting $name...${C_RESET}"
-    nohup $command >> "$log_file" 2>&1 &
-    echo $! > "$pid_file"
-    sleep 2
-    
-    if kill -0 $(cat "$pid_file") 2>/dev/null; then
-        echo -e "${C_GREEN}✅ $name started (PID: $(cat $pid_file))${C_RESET}"
-        return 0
-    else
-        echo -e "${C_RED}❌ Failed to start $name${C_RESET}"
-        return 1
-    fi
-}
-
-stop_service() {
-    local name=$1
-    local pid_file=$2
-    
-    if [ ! -f "$pid_file" ]; then
-        echo -e "${C_YELLOW}⚠️ $name is not running (no PID file)${C_RESET}"
-        return 0
-    fi
-    
-    local pid=$(cat "$pid_file")
-    if kill -0 $pid 2>/dev/null; then
-        echo -e "${C_YELLOW}🛑 Stopping $name (PID: $pid)...${C_RESET}"
-        kill $pid 2>/dev/null
-        sleep 2
-        if kill -0 $pid 2>/dev/null; then
-            kill -9 $pid 2>/dev/null
-        fi
-        rm -f "$pid_file"
-        echo -e "${C_GREEN}✅ $name stopped${C_RESET}"
-    else
-        echo -e "${C_YELLOW}⚠️ $name not running (stale PID file)${C_RESET}"
-        rm -f "$pid_file"
-    fi
-}
-
-restart_service() {
-    local name=$1
-    local command=$2
-    local pid_file=$3
-    stop_service "$name" "$pid_file"
-    start_service "$name" "$command" "$pid_file"
-}
-
-service_status() {
-    local name=$1
-    local pid_file=$2
-    if [ -f "$pid_file" ] && kill -0 $(cat "$pid_file") 2>/dev/null; then
-        echo -e "${C_GREEN}● RUNNING (PID: $(cat $pid_file))${C_RESET}"
-        return 0
-    else
-        echo -e "${C_DIM}○ STOPPED${C_RESET}"
         return 1
     fi
 }
@@ -378,11 +335,10 @@ get_current_mtu() {
     fi
 }
 
-# ========== CHECK SERVICE STATUS (NO SYSTEMD) ==========
+# ========== CHECK SERVICE STATUS ==========
 check_service() {
-    local name=$1
-    local pid_file="$PID_DIR/${name}.pid"
-    if [ -f "$pid_file" ] && kill -0 $(cat "$pid_file") 2>/dev/null; then
+    local service=$1
+    if systemctl is-active "$service" &>/dev/null; then
         echo -e "${C_GREEN}● RUNNING${C_RESET}"
     else
         echo ""
@@ -408,7 +364,7 @@ check_and_open_firewall_port() {
             ufw allow "$port/$protocol"
             echo -e "${C_GREEN}✅ Port $port/$protocol opened in UFW${C_RESET}"
         fi
-    elif command -v firewall-cmd &>/dev/null && command -v systemctl &>/dev/null && systemctl is-active firewalld &>/dev/null; then
+    elif command -v firewall-cmd &>/dev/null && systemctl is-active firewalld &>/dev/null; then
         if ! firewall-cmd --list-ports --permanent | grep -qw "$port/$protocol"; then
             firewall-cmd --add-port="$port/$protocol" --permanent
             firewall-cmd --reload
@@ -445,9 +401,9 @@ show_banner() {
     local current_mtu=$(get_current_mtu)
     
     echo -e "${C_BOLD}${C_PURPLE}╔═══════════════════════════════════════════════════════════════╗${C_RESET}"
-    echo -e "${C_BOLD}${C_PURPLE}║           🔥 VOLTRON TECH ULTIMATE v10.6 🔥                    ║${C_RESET}"
+    echo -e "${C_BOLD}${C_PURPLE}║           🔥 VOLTRON TECH ULTIMATE v10.8 🔥                    ║${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}║        SSH • DNSTT • V2RAY • BADVPN • UDP • SSL • ZiVPN        ║${C_RESET}"
-    echo -e "${C_BOLD}${C_PURPLE}║              CONTAINER EDITION (NO SYSTEMD)                    ║${C_RESET}"
+    echo -e "${C_BOLD}${C_PURPLE}║              FALCON BANNER + WELCOME + WHATSAPP                ║${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}╠═══════════════════════════════════════════════════════════════╣${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}║  Server IP: ${C_GREEN}$IP${C_PURPLE}${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}║  Location:  ${C_GREEN}$LOCATION, $COUNTRY${C_PURPLE}${C_RESET}"
@@ -522,16 +478,16 @@ download_dnstt_binary() {
     return 0
 }
 
-# ========== SPEED BOOSTERS (7 LEVELS) ==========
+# ========== SPEED BOOSTERS (7 LEVELS - ALL WITH FULL ADVANCED OPTIMIZATIONS) ==========
 apply_dnstt_standard() {
     echo -e "\n${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_BLUE}           ⚡ STANDARD BOOSTER (32MB)${C_RESET}"
+    echo -e "${C_BLUE}           ⚡ STANDARD BOOSTER (32MB) + Advanced Optimizations${C_RESET}"
     echo -e "${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
     
     modprobe tcp_bbr 2>/dev/null
     sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1
-    sysctl -w net.core.default_qdisc=fq_codel >/dev/null 2>&1
-    echo -e "${C_GREEN}✓ BBR enabled${C_RESET}"
+    sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ BBR v3 enabled${C_RESET}"
     
     sysctl -w net.ipv4.udp_rmem_min=524288 >/dev/null 2>&1
     sysctl -w net.ipv4.udp_wmem_min=524288 >/dev/null 2>&1
@@ -544,19 +500,39 @@ apply_dnstt_standard() {
     sysctl -w net.core.netdev_max_backlog=100000 >/dev/null 2>&1
     echo -e "${C_GREEN}✓ Packet backlog: 100K${C_RESET}"
     
-    echo -e "\n${C_GREEN}✅ Standard Booster applied! (10-15 Mbps)${C_RESET}"
+    sysctl -w net.netfilter.nf_conntrack_max=4000000 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ Connection tracking: 4M${C_RESET}"
+    
+    ulimit -n 1048576 2>/dev/null
+    echo -e "${C_GREEN}✓ File descriptors: 1M${C_RESET}"
+    
+    sysctl -w net.ipv4.tcp_fastopen=3 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP Fast Open enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_sack=1 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_dsack=1 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_fack=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP SACK, DSACK, FACK enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_timestamps=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP timestamps enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_slow_start_after_idle=0 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_mtu_probing=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ High latency optimization enabled${C_RESET}"
+    sysctl -w net.ipv4.ip_local_port_range="1024 65535" >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ Local port range increased to 1024-65535${C_RESET}"
+    
+    echo -e "\n${C_GREEN}✅ Standard Booster applied! (10-15 Mbps) + Full Advanced Optimizations${C_RESET}"
     sleep 1
 }
 
 apply_dnstt_medium() {
     echo -e "\n${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_BLUE}           ⚡ MEDIUM BOOSTER (64MB)${C_RESET}"
+    echo -e "${C_BLUE}           ⚡ MEDIUM BOOSTER (64MB) + Advanced Optimizations${C_RESET}"
     echo -e "${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
     
     modprobe tcp_bbr 2>/dev/null
     sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1
-    sysctl -w net.core.default_qdisc=fq_codel >/dev/null 2>&1
-    echo -e "${C_GREEN}✓ BBR v2 enabled${C_RESET}"
+    sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ BBR v3 enabled${C_RESET}"
     
     sysctl -w net.ipv4.udp_rmem_min=1048576 >/dev/null 2>&1
     sysctl -w net.ipv4.udp_wmem_min=1048576 >/dev/null 2>&1
@@ -576,19 +552,33 @@ apply_dnstt_medium() {
     ulimit -n 1048576 2>/dev/null
     echo -e "${C_GREEN}✓ File descriptors: 1M${C_RESET}"
     
-    echo -e "\n${C_GREEN}✅ Medium Booster applied! (15-20 Mbps) 🚀${C_RESET}"
+    sysctl -w net.ipv4.tcp_fastopen=3 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP Fast Open enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_sack=1 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_dsack=1 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_fack=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP SACK, DSACK, FACK enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_timestamps=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP timestamps enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_slow_start_after_idle=0 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_mtu_probing=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ High latency optimization enabled${C_RESET}"
+    sysctl -w net.ipv4.ip_local_port_range="1024 65535" >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ Local port range increased to 1024-65535${C_RESET}"
+    
+    echo -e "\n${C_GREEN}✅ Medium Booster applied! (15-20 Mbps) 🚀 + Full Advanced Optimizations${C_RESET}"
     sleep 1
 }
 
 apply_dnstt_high() {
     echo -e "\n${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_BLUE}           ⚡ HIGH BOOSTER (128MB)${C_RESET}"
+    echo -e "${C_BLUE}           ⚡ HIGH BOOSTER (128MB) + Advanced Optimizations${C_RESET}"
     echo -e "${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
     
     modprobe tcp_bbr 2>/dev/null
     sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1
-    sysctl -w net.core.default_qdisc=fq_codel >/dev/null 2>&1
-    echo -e "${C_GREEN}✓ BBR v2 enabled${C_RESET}"
+    sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ BBR v3 enabled${C_RESET}"
     
     sysctl -w net.ipv4.udp_rmem_min=2097152 >/dev/null 2>&1
     sysctl -w net.ipv4.udp_wmem_min=2097152 >/dev/null 2>&1
@@ -608,19 +598,33 @@ apply_dnstt_high() {
     ulimit -n 2097152 2>/dev/null
     echo -e "${C_GREEN}✓ File descriptors: 2M${C_RESET}"
     
-    echo -e "\n${C_GREEN}✅ High Booster applied! (20-25 Mbps) 🚀🚀${C_RESET}"
+    sysctl -w net.ipv4.tcp_fastopen=3 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP Fast Open enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_sack=1 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_dsack=1 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_fack=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP SACK, DSACK, FACK enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_timestamps=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP timestamps enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_slow_start_after_idle=0 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_mtu_probing=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ High latency optimization enabled${C_RESET}"
+    sysctl -w net.ipv4.ip_local_port_range="1024 65535" >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ Local port range increased to 1024-65535${C_RESET}"
+    
+    echo -e "\n${C_GREEN}✅ High Booster applied! (20-25 Mbps) 🚀🚀 + Full Advanced Optimizations${C_RESET}"
     sleep 1
 }
 
 apply_dnstt_ultra() {
     echo -e "\n${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_BLUE}           🚀 ULTRA BOOSTER (256MB)${C_RESET}"
+    echo -e "${C_BLUE}           🚀 ULTRA BOOSTER (256MB) + Advanced Optimizations${C_RESET}"
     echo -e "${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
     
     modprobe tcp_bbr 2>/dev/null
     sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1
-    sysctl -w net.core.default_qdisc=fq_codel >/dev/null 2>&1
-    echo -e "${C_GREEN}✓ BBR v2 enabled${C_RESET}"
+    sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ BBR v3 enabled${C_RESET}"
     
     sysctl -w net.ipv4.udp_rmem_min=4194304 >/dev/null 2>&1
     sysctl -w net.ipv4.udp_wmem_min=4194304 >/dev/null 2>&1
@@ -640,18 +644,32 @@ apply_dnstt_ultra() {
     ulimit -n 4194304 2>/dev/null
     echo -e "${C_GREEN}✓ File descriptors: 4M${C_RESET}"
     
-    echo -e "\n${C_GREEN}✅ ULTRA Booster applied! (25-35 Mbps) 🚀🚀🚀${C_RESET}"
+    sysctl -w net.ipv4.tcp_fastopen=3 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP Fast Open enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_sack=1 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_dsack=1 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_fack=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP SACK, DSACK, FACK enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_timestamps=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP timestamps enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_slow_start_after_idle=0 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_mtu_probing=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ High latency optimization enabled${C_RESET}"
+    sysctl -w net.ipv4.ip_local_port_range="1024 65535" >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ Local port range increased to 1024-65535${C_RESET}"
+    
+    echo -e "\n${C_GREEN}✅ ULTRA Booster applied! (25-35 Mbps) 🚀🚀🚀 + Full Advanced Optimizations${C_RESET}"
     sleep 1
 }
 
 apply_dnstt_extreme() {
     echo -e "\n${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_BLUE}           💥 EXTREME BOOSTER (512MB)${C_RESET}"
+    echo -e "${C_BLUE}           💥 EXTREME BOOSTER (512MB) + Advanced Optimizations${C_RESET}"
     echo -e "${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
     
     modprobe tcp_bbr 2>/dev/null
     sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1
-    sysctl -w net.core.default_qdisc=fq_codel >/dev/null 2>&1
+    sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1
     echo -e "${C_GREEN}✓ BBR v3 enabled${C_RESET}"
     
     sysctl -w net.ipv4.udp_rmem_min=8388608 >/dev/null 2>&1
@@ -672,19 +690,33 @@ apply_dnstt_extreme() {
     ulimit -n 8388608 2>/dev/null
     echo -e "${C_GREEN}✓ File descriptors: 8M${C_RESET}"
     
-    echo -e "\n${C_GREEN}✅ EXTREME Booster applied! (35-50 Mbps) 💥💥💥${C_RESET}"
+    sysctl -w net.ipv4.tcp_fastopen=3 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP Fast Open enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_sack=1 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_dsack=1 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_fack=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP SACK, DSACK, FACK enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_timestamps=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP timestamps enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_slow_start_after_idle=0 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_mtu_probing=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ High latency optimization enabled${C_RESET}"
+    sysctl -w net.ipv4.ip_local_port_range="1024 65535" >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ Local port range increased to 1024-65535${C_RESET}"
+    
+    echo -e "\n${C_GREEN}✅ EXTREME Booster applied! (35-50 Mbps) 💥💥💥 + Full Advanced Optimizations${C_RESET}"
     sleep 1
 }
 
 apply_dnstt_ultra_plus() {
     echo -e "\n${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_BLUE}           🚀 ULTRA PLUS BOOSTER (768MB)${C_RESET}"
+    echo -e "${C_BLUE}           🚀 ULTRA PLUS BOOSTER (768MB) + Advanced Optimizations${C_RESET}"
     echo -e "${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
     
     modprobe tcp_bbr 2>/dev/null
     sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1
-    sysctl -w net.core.default_qdisc=fq_codel >/dev/null 2>&1
-    echo -e "${C_GREEN}✓ BBR v2 enabled${C_RESET}"
+    sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ BBR v3 enabled${C_RESET}"
     
     sysctl -w net.ipv4.udp_rmem_min=6291456 >/dev/null 2>&1
     sysctl -w net.ipv4.udp_wmem_min=6291456 >/dev/null 2>&1
@@ -704,18 +736,32 @@ apply_dnstt_ultra_plus() {
     ulimit -n 6291456 2>/dev/null
     echo -e "${C_GREEN}✓ File descriptors: 6M${C_RESET}"
     
-    echo -e "\n${C_GREEN}✅ ULTRA PLUS Booster applied! (40-60 Mbps) 🚀🚀🚀🚀${C_RESET}"
+    sysctl -w net.ipv4.tcp_fastopen=3 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP Fast Open enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_sack=1 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_dsack=1 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_fack=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP SACK, DSACK, FACK enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_timestamps=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP timestamps enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_slow_start_after_idle=0 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_mtu_probing=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ High latency optimization enabled${C_RESET}"
+    sysctl -w net.ipv4.ip_local_port_range="1024 65535" >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ Local port range increased to 1024-65535${C_RESET}"
+    
+    echo -e "\n${C_GREEN}✅ ULTRA PLUS Booster applied! (40-60 Mbps) 🚀🚀🚀🚀 + Full Advanced Optimizations${C_RESET}"
     sleep 1
 }
 
 apply_dnstt_extreme_plus() {
     echo -e "\n${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_BLUE}           💥 EXTREME PLUS BOOSTER (1GB)${C_RESET}"
+    echo -e "${C_BLUE}           💥 EXTREME PLUS BOOSTER (1GB) + Advanced Optimizations${C_RESET}"
     echo -e "${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
     
     modprobe tcp_bbr 2>/dev/null
     sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1
-    sysctl -w net.core.default_qdisc=fq_codel >/dev/null 2>&1
+    sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1
     echo -e "${C_GREEN}✓ BBR v3 enabled${C_RESET}"
     
     sysctl -w net.ipv4.udp_rmem_min=12582912 >/dev/null 2>&1
@@ -736,7 +782,21 @@ apply_dnstt_extreme_plus() {
     ulimit -n 12582912 2>/dev/null
     echo -e "${C_GREEN}✓ File descriptors: 12M${C_RESET}"
     
-    echo -e "\n${C_GREEN}✅ EXTREME PLUS Booster applied! (60-100 Mbps) 💥💥💥💥💥${C_RESET}"
+    sysctl -w net.ipv4.tcp_fastopen=3 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP Fast Open enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_sack=1 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_dsack=1 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_fack=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP SACK, DSACK, FACK enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_timestamps=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ TCP timestamps enabled${C_RESET}"
+    sysctl -w net.ipv4.tcp_slow_start_after_idle=0 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_mtu_probing=1 >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ High latency optimization enabled${C_RESET}"
+    sysctl -w net.ipv4.ip_local_port_range="1024 65535" >/dev/null 2>&1
+    echo -e "${C_GREEN}✓ Local port range increased to 1024-65535${C_RESET}"
+    
+    echo -e "\n${C_GREEN}✅ EXTREME PLUS Booster applied! (60-100 Mbps) 💥💥💥💥💥 + Full Advanced Optimizations${C_RESET}"
     sleep 1
 }
 
@@ -772,10 +832,10 @@ generate_keys() {
     echo -e "\n${C_GREEN}✅ Keys generated successfully!${C_RESET}"
 }
 
-# ========== DESEC DNS AUTO DOMAIN GENERATOR ==========
+# ========== DESEC DNS AUTO DOMAIN GENERATOR (IPv4 ONLY) ==========
 generate_desec_domain() {
     echo -e "\n${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_BLUE}           ☁️  DESEC DNS AUTO DOMAIN GENERATOR${C_RESET}"
+    echo -e "${C_BLUE}           ☁️  DESEC DNS AUTO DOMAIN GENERATOR (IPv4 Only)${C_RESET}"
     echo -e "${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
     
     rand=$(head /dev/urandom | tr -dc a-z0-9 | head -c 8)
@@ -784,48 +844,18 @@ generate_desec_domain() {
     
     SERVER_IPV4=$(curl -s -4 ifconfig.me 2>/dev/null || curl -s -4 icanhazip.com 2>/dev/null)
     if [ -z "$SERVER_IPV4" ] || ! _is_valid_ipv4 "$SERVER_IPV4"; then
-        echo -e "${C_YELLOW}⚠️ Could not detect IPv4 address${C_RESET}"
-        SERVER_IPV4=""
+        echo -e "${C_RED}❌ Could not detect valid IPv4 address. Aborting.${C_RESET}"
+        return 1
     fi
     
-    SERVER_IPV6=$(curl -s -6 ifconfig.me 2>/dev/null || curl -s -6 icanhazip.com 2>/dev/null)
-    if [ -z "$SERVER_IPV6" ] || ! _is_valid_ipv6 "$SERVER_IPV6"; then
-        echo -e "${C_YELLOW}⚠️ Could not detect IPv6 address${C_RESET}"
-        SERVER_IPV6=""
-    fi
+    echo -e "${C_GREEN}[1/2] Creating IPv4 A record: $ns.$DESEC_DOMAIN → $SERVER_IPV4${C_RESET}"
     
-    local API_DATA="["
-    local first=true
-    
-    if [ -n "$SERVER_IPV4" ]; then
-        echo -e "${C_GREEN}[1/3] Creating IPv4 A record: $ns.$DESEC_DOMAIN → $SERVER_IPV4${C_RESET}"
-        if [ "$first" = true ]; then
-            API_DATA="${API_DATA}{\"subname\":\"$ns\",\"type\":\"A\",\"ttl\":3600,\"records\":[\"$SERVER_IPV4\"]}"
-            first=false
-        else
-            API_DATA="${API_DATA},{\"subname\":\"$ns\",\"type\":\"A\",\"ttl\":3600,\"records\":[\"$SERVER_IPV4\"]}"
-        fi
-    fi
-    
-    if [ -n "$SERVER_IPV6" ]; then
-        echo -e "${C_GREEN}[2/3] Creating IPv6 AAAA record: $ns.$DESEC_DOMAIN → $SERVER_IPV6${C_RESET}"
-        if [ "$first" = true ]; then
-            API_DATA="${API_DATA}{\"subname\":\"$ns\",\"type\":\"AAAA\",\"ttl\":3600,\"records\":[\"$SERVER_IPV6\"]}"
-            first=false
-        else
-            API_DATA="${API_DATA},{\"subname\":\"$ns\",\"type\":\"AAAA\",\"ttl\":3600,\"records\":[\"$SERVER_IPV6\"]}"
-        fi
-    fi
+    local API_DATA="[{\"subname\":\"$ns\",\"type\":\"A\",\"ttl\":3600,\"records\":[\"$SERVER_IPV4\"]}]"
     
     local ns_target="$ns.$DESEC_DOMAIN."
-    echo -e "${C_GREEN}[3/3] Creating NS record: $tun.$DESEC_DOMAIN → $ns.$DESEC_DOMAIN${C_RESET}"
-    if [ "$first" = true ]; then
-        API_DATA="${API_DATA}{\"subname\":\"$tun\",\"type\":\"NS\",\"ttl\":3600,\"records\":[\"$ns_target\"]}"
-    else
-        API_DATA="${API_DATA},{\"subname\":\"$tun\",\"type\":\"NS\",\"ttl\":3600,\"records\":[\"$ns_target\"]}"
-    fi
+    echo -e "${C_GREEN}[2/2] Creating NS record: $tun.$DESEC_DOMAIN → $ns.$DESEC_DOMAIN${C_RESET}"
     
-    API_DATA="${API_DATA}]"
+    API_DATA="[{\"subname\":\"$ns\",\"type\":\"A\",\"ttl\":3600,\"records\":[\"$SERVER_IPV4\"]},{\"subname\":\"$tun\",\"type\":\"NS\",\"ttl\":3600,\"records\":[\"$ns_target\"]}]"
     
     local RESPONSE
     RESPONSE=$(curl -s -w "%{http_code}" -X POST "https://desec.io/api/v1/domains/$DESEC_DOMAIN/rrsets/" \
@@ -841,14 +871,8 @@ generate_desec_domain() {
         echo "$ns" > "$DB_DIR/desec_ns_subdomain.txt"
         echo "$tun" > "$DB_DIR/desec_tun_subdomain.txt"
         
-        echo -e "\n${C_GREEN}✅ Auto-generated domain: ${C_YELLOW}$DOMAIN${C_RESET}"
-        
-        if [ -n "$SERVER_IPV4" ]; then
-            echo -e "  • IPv4: ${C_GREEN}$SERVER_IPV4${C_RESET}"
-        fi
-        if [ -n "$SERVER_IPV6" ]; then
-            echo -e "  • IPv6: ${C_GREEN}$SERVER_IPV6${C_RESET}"
-        fi
+        echo -e "\n${C_GREEN}✅ Auto-generated domain (IPv4 only): ${C_YELLOW}$DOMAIN${C_RESET}"
+        echo -e "  • IPv4: ${C_GREEN}$SERVER_IPV4${C_RESET}"
         return 0
     else
         echo -e "${C_RED}❌ Failed to create DNS records. API returned HTTP $HTTP_CODE.${C_RESET}"
@@ -856,7 +880,7 @@ generate_desec_domain() {
     fi
 }
 
-# ========== DELETE DESEC DNS RECORDS ==========
+# ========== DELETE DESEC DNS RECORDS (IPv4 Only) ==========
 delete_desec_dns_records() {
     echo -e "\n${C_BLUE}🗑️ Deleting auto-generated DNS records...${C_RESET}"
     
@@ -873,9 +897,7 @@ delete_desec_dns_records() {
     if [ -n "$ns_subdomain" ]; then
         curl -s -X DELETE "https://desec.io/api/v1/domains/$DESEC_DOMAIN/rrsets/$ns_subdomain/A/" \
             -H "Authorization: Token $DESEC_TOKEN" > /dev/null
-        curl -s -X DELETE "https://desec.io/api/v1/domains/$DESEC_DOMAIN/rrsets/$ns_subdomain/AAAA/" \
-            -H "Authorization: Token $DESEC_TOKEN" > /dev/null
-        echo -e "${C_GREEN}✓ A/AAAA records deleted${C_RESET}"
+        echo -e "${C_GREEN}✓ A record deleted${C_RESET}"
     fi
     
     if [ -n "$tun_subdomain" ]; then
@@ -897,7 +919,7 @@ setup_domain() {
     
     echo -e "${C_GREEN}Select domain option:${C_RESET}"
     echo -e "  ${C_GREEN}1)${C_RESET} Custom domain (Enter your own)"
-    echo -e "  ${C_GREEN}2)${C_RESET} Auto-generate with deSEC DNS (IPv4 + IPv6)"
+    echo -e "  ${C_GREEN}2)${C_RESET} Auto-generate with deSEC DNS (IPv4 only)"
     echo ""
     read -p "👉 Choice [1-2, default=2]: " domain_option
     domain_option=${domain_option:-2}
@@ -945,12 +967,15 @@ configure_firewall() {
     echo -e "${C_GREEN}[1/5] Disabling UFW if present...${C_RESET}"
     if command -v ufw &> /dev/null; then
         ufw --force disable 2>/dev/null || true
+        systemctl stop ufw 2>/dev/null || true
+        systemctl disable ufw 2>/dev/null || true
     fi
     
     echo -e "${C_GREEN}[2/5] Stopping systemd-resolved if present...${C_RESET}"
-    if command -v systemctl &>/dev/null && systemctl is-active --quiet systemd-resolved 2>/dev/null; then
+    if systemctl is-active --quiet systemd-resolved 2>/dev/null; then
         systemctl stop systemd-resolved 2>/dev/null
         systemctl disable systemd-resolved 2>/dev/null
+        
         rm -f /etc/resolv.conf
         cat > /etc/resolv.conf << 'EOF'
 nameserver 8.8.8.8
@@ -985,24 +1010,43 @@ EOF
     mkdir -p /etc/iptables
     iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
     
+    if command -v netfilter-persistent &> /dev/null; then
+        netfilter-persistent save > /dev/null 2>&1
+    fi
+    
     echo -e "\n${C_GREEN}✅ Firewall configured${C_RESET}"
     return 0
 }
 
-# ========== DNSTT SERVICE (NO SYSTEMD) ==========
-create_dnstt_service() {
+# ========== DNSTT SERVICE (LIVE MODE - NO AUTO-RESTART) ==========
+create_dnstt_service_live() {
     local domain=$1
     local mtu=$2
     local ssh_port=$3
     
-    cat > "$DNSTT_SERVICE_SCRIPT" <<EOF
-#!/bin/bash
-# DNSTT Service Script (Container Edition)
-exec $DNSTT_SERVER -udp :5300 -privkey-file $DB_DIR/server.key -mtu $mtu $domain 127.0.0.1:$ssh_port
+    cat > "$DNSTT_SERVICE" <<EOF
+[Unit]
+Description=DNSTT Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$DB_DIR
+ExecStart=$DNSTT_SERVER -udp :5300 -privkey-file $DB_DIR/server.key -mtu $mtu $domain 127.0.0.1:$ssh_port
+Restart=no
+
+StandardOutput=append:$LOGS_DIR/dnstt-server.log
+StandardError=append:$LOGS_DIR/dnstt-error.log
+
+[Install]
+WantedBy=multi-user.target
 EOF
-    chmod +x "$DNSTT_SERVICE_SCRIPT"
+
+    systemctl daemon-reload
+    systemctl enable dnstt.service > /dev/null 2>&1
     
-    echo -e "${C_GREEN}✅ DNSTT service script created${C_RESET}"
+    echo -e "${C_GREEN}✅ DNSTT service created (live mode, no auto-restart)${C_RESET}"
 }
 
 # ========== DNSTT INFO FILE ==========
@@ -1055,7 +1099,7 @@ show_client_commands_falcon_style() {
     echo -e "${C_WHITE}  ssh username@127.0.0.1 -p $ssh_port${C_RESET}"
 }
 
-# ========== AUTO HTML BANNER FUNCTIONS ==========
+# ========== AUTO HTML BANNER FUNCTIONS (FALCON STYLE + WELCOME + WHATSAPP) ==========
 _connect_auto_banner_to_ssh() {
     echo -e "\n${C_BLUE}🔗 Connecting Auto HTML Banner to SSH...${C_RESET}"
     
@@ -1063,6 +1107,7 @@ _connect_auto_banner_to_ssh() {
     
     cat > /etc/ssh/sshd_config.d/voltron-auto-banner.conf << 'EOF'
 # Voltron Tech Auto HTML Banner
+# This banner is generated automatically by the limiter service
 Match User *
     Banner /etc/voltrontech/banners/%u.txt
 EOF
@@ -1071,12 +1116,7 @@ EOF
         echo "Include /etc/ssh/sshd_config.d/*.conf" >> /etc/ssh/sshd_config
     fi
     
-    if command -v systemctl &>/dev/null; then
-        systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null
-    else
-        pkill -HUP sshd 2>/dev/null
-        /etc/init.d/ssh reload 2>/dev/null || /etc/init.d/sshd reload 2>/dev/null
-    fi
+    systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null
     
     echo -e "${C_GREEN}✅ Auto HTML Banner connected to SSH${C_RESET}"
 }
@@ -1091,6 +1131,9 @@ _enable_auto_banner() {
     
     _connect_auto_banner_to_ssh
     
+    # Force update of SSH config for all users
+    _update_ssh_banners_config
+    
     echo -e "${C_GREEN}✅ Auto HTML Banner enabled!${C_RESET}"
     echo -e "${C_CYAN}📌 Users will see account status when connecting via SSH tunnel${C_RESET}"
     safe_read "" dummy
@@ -1103,13 +1146,8 @@ _disable_auto_banner() {
     
     rm -f "/etc/voltrontech/banners_enabled"
     rm -f /etc/ssh/sshd_config.d/voltron-auto-banner.conf
-    
-    if command -v systemctl &>/dev/null; then
-        systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null
-    else
-        pkill -HUP sshd 2>/dev/null
-        /etc/init.d/ssh reload 2>/dev/null || /etc/init.d/sshd reload 2>/dev/null
-    fi
+    rm -f /etc/ssh/sshd_config.d/voltron-banners.conf
+    systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null
     
     echo -e "${C_GREEN}✅ Auto HTML Banner disabled!${C_RESET}"
     safe_read "" dummy
@@ -1738,7 +1776,7 @@ generate_client_config() {
         fi
     fi
 
-    if command -v systemctl &>/dev/null && systemctl is-active --quiet udp-custom 2>/dev/null; then
+    if systemctl is-active --quiet udp-custom 2>/dev/null; then
         echo -e "\n🔹 ${C_BOLD}UDP Custom${C_RESET}:"
         echo -e "   • IP: $host_ip (Must use numeric IP)"
         echo -e "   • Port: 1-65535 (Exclude 53, 5300)"
@@ -1746,7 +1784,7 @@ generate_client_config() {
         echo -e "   • Password: $pass"
     fi
 
-    if command -v systemctl &>/dev/null && systemctl is-active --quiet dnstt 2>/dev/null; then
+    if systemctl is-active --quiet dnstt 2>/dev/null; then
         if [ -f "$DNSTT_INFO_FILE" ]; then
             source "$DNSTT_INFO_FILE"
             echo -e "\n🔹 ${C_BOLD}DNSTT (SlowDNS)${C_RESET}:"
@@ -1758,7 +1796,7 @@ generate_client_config() {
         fi
     fi
     
-    if command -v systemctl &>/dev/null && systemctl is-active --quiet zivpn 2>/dev/null; then
+    if systemctl is-active --quiet zivpn 2>/dev/null; then
         echo -e "\n🔹 ${C_BOLD}ZiVPN${C_RESET}:"
         echo -e "   • UDP Port: 5667"
         echo -e "   • Forwarded Ports: 6000-19999"
@@ -1779,43 +1817,53 @@ client_config_menu() {
     generate_client_config "$u" "$pass"
 }
 
-# ========== SSH BANNER CONFIG ==========
+# ========== SSH BANNER CONFIG (FALCON STYLE) ==========
 _update_ssh_banners_config() {
-    if [[ ! -f "/etc/voltrontech/banners_enabled" ]]; then
-        rm -f /etc/ssh/sshd_config.d/voltron-banners.conf
-        if command -v systemctl &>/dev/null; then
-            systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null
-        else
-            pkill -HUP sshd 2>/dev/null
-        fi
-        return
-    fi
+    echo -e "${C_BLUE}🔧 Updating SSH banner configuration...${C_RESET}"
     
     mkdir -p "/etc/voltrontech/banners" /etc/ssh/sshd_config.d
     
-    > /etc/ssh/sshd_config.d/voltron-banners.conf
-    echo "# Voltron Tech Auto Banners - Generated by script" >> /etc/ssh/sshd_config.d/voltron-banners.conf
+    if [[ ! -f "/etc/voltrontech/banners_enabled" ]]; then
+        rm -f /etc/ssh/sshd_config.d/voltron-banners.conf
+        systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null
+        echo -e "${C_YELLOW}⚠️ Auto banner disabled, config removed${C_RESET}"
+        return
+    fi
     
-    if [[ -f "$DB_FILE" ]]; then
-        while IFS=: read -r user _rest; do
-            [[ -z "$user" || "$user" == \#* ]] && continue
-            cat >> /etc/ssh/sshd_config.d/voltron-banners.conf <<EOF
+    if [[ ! -s "$DB_FILE" ]]; then
+        echo -e "${C_YELLOW}⚠️ No users found, skipping banner config${C_RESET}"
+        return
+    fi
+    
+    > /etc/ssh/sshd_config.d/voltron-banners.conf
+    echo "# Voltron Tech Auto Banners - Generated $(date)" >> /etc/ssh/sshd_config.d/voltron-banners.conf
+    
+    while IFS=: read -r user _rest; do
+        [[ -z "$user" || "$user" == \#* ]] && continue
+        
+        if [[ ! -f "/etc/voltrontech/banners/${user}.txt" ]]; then
+            echo "Waiting for limiter to generate banner..." > "/etc/voltrontech/banners/${user}.txt"
+        fi
+        
+        cat >> /etc/ssh/sshd_config.d/voltron-banners.conf <<EOF
 
 Match User $user
     Banner /etc/voltrontech/banners/${user}.txt
 EOF
-        done < "$DB_FILE"
-    fi
+        echo -e "${C_GREEN}✓ Added banner config for user: $user${C_RESET}"
+    done < "$DB_FILE"
     
     if ! grep -q "Include /etc/ssh/sshd_config.d/" /etc/ssh/sshd_config 2>/dev/null; then
         echo "Include /etc/ssh/sshd_config.d/*.conf" >> /etc/ssh/sshd_config
+        echo -e "${C_GREEN}✓ Added Include directive to sshd_config${C_RESET}"
     fi
     
-    if command -v systemctl &>/dev/null; then
+    if sshd -t 2>/dev/null; then
         systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null
+        echo -e "${C_GREEN}✅ SSH banner configuration applied successfully${C_RESET}"
     else
-        pkill -HUP sshd 2>/dev/null
-        /etc/init.d/ssh reload 2>/dev/null || /etc/init.d/sshd reload 2>/dev/null
+        echo -e "${C_RED}❌ SSH config validation failed!${C_RESET}"
+        sshd -t
     fi
 }
 
@@ -1902,8 +1950,8 @@ _enable_auto_reboot() {
     echo -e "${C_BLUE}           ⏰ Schedule: Daily at 00:00 (Midnight)${C_RESET}"
     echo -e "${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
     
-    (crontab -l 2>/dev/null | grep -v "reboot") | crontab - 2>/dev/null
-    (crontab -l 2>/dev/null; echo "0 0 * * * /sbin/reboot") | crontab - 2>/dev/null
+    (crontab -l 2>/dev/null | grep -v "systemctl reboot") | crontab - 2>/dev/null
+    (crontab -l 2>/dev/null; echo "0 0 * * * /usr/sbin/systemctl reboot") | crontab - 2>/dev/null
     
     echo -e "${C_GREEN}✅ Auto reboot scheduled for every day at 00:00 (Midnight)${C_RESET}"
     safe_read "" dummy
@@ -1914,7 +1962,7 @@ _disable_auto_reboot() {
     echo -e "${C_BLUE}           🛑 DISABLING AUTO REBOOT${C_RESET}"
     echo -e "${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
     
-    (crontab -l 2>/dev/null | grep -v "reboot") | crontab - 2>/dev/null
+    (crontab -l 2>/dev/null | grep -v "systemctl reboot") | crontab - 2>/dev/null
     
     echo -e "${C_GREEN}✅ Auto reboot disabled${C_RESET}"
     safe_read "" dummy
@@ -1925,7 +1973,7 @@ _view_auto_reboot_status() {
     show_banner
     echo -e "${C_BOLD}${C_PURPLE}--- 🔄 Auto Reboot Status ---${C_RESET}"
     
-    local cron_check=$(crontab -l 2>/dev/null | grep "reboot")
+    local cron_check=$(crontab -l 2>/dev/null | grep "systemctl reboot")
     if [[ -n "$cron_check" ]]; then
         echo -e "\n${C_GREEN}✅ Auto Reboot: ENABLED${C_RESET}"
         echo -e "${C_CYAN}📌 Schedule: Daily at 00:00 (Midnight)${C_RESET}"
@@ -1942,7 +1990,7 @@ auto_reboot_menu() {
         show_banner
         
         local reboot_status=""
-        local cron_check=$(crontab -l 2>/dev/null | grep "reboot")
+        local cron_check=$(crontab -l 2>/dev/null | grep "systemctl reboot")
         if [[ -n "$cron_check" ]]; then
             reboot_status="${C_GREEN}ENABLED (Daily at 00:00)${C_RESET}"
         else
@@ -2051,16 +2099,13 @@ EOF
 _restart_ssh() {
     echo -e "\n${C_BLUE}🔄 Restarting SSH service...${C_RESET}"
     
-    if command -v systemctl &>/dev/null; then
-        if systemctl list-units --full -all | grep -q "sshd.service"; then
-            systemctl restart sshd
-        elif systemctl list-units --full -all | grep -q "ssh.service"; then
-            systemctl restart ssh
-        else
-            /etc/init.d/ssh restart 2>/dev/null || /etc/init.d/sshd restart 2>/dev/null
-        fi
+    if systemctl list-units --full -all | grep -q "sshd.service"; then
+        systemctl restart sshd
+    elif systemctl list-units --full -all | grep -q "ssh.service"; then
+        systemctl restart ssh
     else
-        /etc/init.d/ssh restart 2>/dev/null || /etc/init.d/sshd restart 2>/dev/null
+        echo -e "${C_RED}❌ SSH service not found.${C_RESET}"
+        return 1
     fi
     
     echo -e "${C_GREEN}✅ SSH service restarted.${C_RESET}"
@@ -2111,21 +2156,32 @@ install_badvpn() {
     make
     cp badvpn-udpgw "$BADVPN_BIN"
     
-    cat > "$BADVPN_SERVICE_SCRIPT" <<EOF
-#!/bin/bash
-exec $BADVPN_BIN --listen-addr 0.0.0.0:$BADVPN_PORT --max-clients 1000
+    cat > "$BADVPN_SERVICE" <<EOF
+[Unit]
+Description=BadVPN UDP Gateway
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=$BADVPN_BIN --listen-addr 0.0.0.0:$BADVPN_PORT --max-clients 1000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
 EOF
-    chmod +x "$BADVPN_SERVICE_SCRIPT"
-    
-    start_service "badvpn" "$BADVPN_SERVICE_SCRIPT" "$BADVPN_PID_FILE"
+
+    systemctl daemon-reload
+    systemctl enable badvpn.service
+    systemctl start badvpn.service
     echo -e "${C_GREEN}✅ badvpn installed on port $BADVPN_PORT${C_RESET}"
     safe_read "" dummy
 }
 
 uninstall_badvpn() {
-    stop_service "badvpn" "$BADVPN_PID_FILE"
-    rm -f "$BADVPN_SERVICE_SCRIPT"
-    rm -f "$BADVPN_BIN"
+    systemctl stop badvpn.service 2>/dev/null
+    systemctl disable badvpn.service 2>/dev/null
+    rm -f "$BADVPN_SERVICE" "$BADVPN_BIN"
+    systemctl daemon-reload
     echo -e "${C_GREEN}✅ badvpn uninstalled${C_RESET}"
     safe_read "" dummy
 }
@@ -2148,22 +2204,34 @@ install_udp_custom() {
 {"listen": ":$UDP_CUSTOM_PORT", "auth": {"mode": "passwords"}}
 EOF
 
-    cat > "$UDP_CUSTOM_SERVICE_SCRIPT" <<EOF
-#!/bin/bash
-cd $UDP_CUSTOM_DIR
-exec $UDP_CUSTOM_BIN server -exclude 53,5300
+    cat > "$UDP_CUSTOM_SERVICE" <<EOF
+[Unit]
+Description=UDP Custom
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$UDP_CUSTOM_DIR
+ExecStart=$UDP_CUSTOM_BIN server -exclude 53,5300
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
 EOF
-    chmod +x "$UDP_CUSTOM_SERVICE_SCRIPT"
-    
-    start_service "udp-custom" "$UDP_CUSTOM_SERVICE_SCRIPT" "$UDP_CUSTOM_PID_FILE"
+
+    systemctl daemon-reload
+    systemctl enable udp-custom.service
+    systemctl start udp-custom.service
     echo -e "${C_GREEN}✅ udp-custom installed on port $UDP_CUSTOM_PORT${C_RESET}"
     safe_read "" dummy
 }
 
 uninstall_udp_custom() {
-    stop_service "udp-custom" "$UDP_CUSTOM_PID_FILE"
-    rm -f "$UDP_CUSTOM_SERVICE_SCRIPT"
+    systemctl stop udp-custom.service 2>/dev/null
+    systemctl disable udp-custom.service 2>/dev/null
+    rm -f "$UDP_CUSTOM_SERVICE"
     rm -rf "$UDP_CUSTOM_DIR"
+    systemctl daemon-reload
     echo -e "${C_GREEN}✅ udp-custom uninstalled${C_RESET}"
     safe_read "" dummy
 }
@@ -2199,19 +2267,13 @@ backend ssh_backend
     server ssh_server 127.0.0.1:22
 EOF
 
-    cat > "$HAPROXY_SERVICE_SCRIPT" <<EOF
-#!/bin/bash
-exec haproxy -f $HAPROXY_CONFIG
-EOF
-    chmod +x "$HAPROXY_SERVICE_SCRIPT"
-    
-    start_service "haproxy" "$HAPROXY_SERVICE_SCRIPT" "$HAPROXY_PID_FILE"
+    systemctl restart haproxy
     echo -e "${C_GREEN}✅ SSL Tunnel installed on port $SSL_PORT${C_RESET}"
     safe_read "" dummy
 }
 
 uninstall_ssl_tunnel() {
-    stop_service "haproxy" "$HAPROXY_PID_FILE"
+    systemctl stop haproxy 2>/dev/null
     $PKG_REMOVE haproxy
     rm -f "$HAPROXY_CONFIG"
     rm -f "$SSL_CERT_FILE"
@@ -2235,13 +2297,23 @@ install_voltron_proxy() {
     read -p "Enter port(s) [8080]: " ports
     ports=${ports:-8080}
     
-    cat > "$VOLTRONPROXY_SERVICE_SCRIPT" <<EOF
-#!/bin/bash
-exec $VOLTRONPROXY_BIN -p $ports
+    cat > "$VOLTRONPROXY_SERVICE" <<EOF
+[Unit]
+Description=VOLTRON Proxy
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=$VOLTRONPROXY_BIN -p $ports
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
 EOF
-    chmod +x "$VOLTRONPROXY_SERVICE_SCRIPT"
-    
-    start_service "voltronproxy" "$VOLTRONPROXY_SERVICE_SCRIPT" "$VOLTRONPROXY_PID_FILE"
+
+    systemctl daemon-reload
+    systemctl enable voltronproxy.service
+    systemctl start voltronproxy.service
     
     echo "$ports" > "$CONFIG_DIR/voltronproxy_ports.conf"
     echo -e "${C_GREEN}✅ VOLTRON Proxy installed on port(s) $ports${C_RESET}"
@@ -2249,9 +2321,11 @@ EOF
 }
 
 uninstall_voltron_proxy() {
-    stop_service "voltronproxy" "$VOLTRONPROXY_PID_FILE"
-    rm -f "$VOLTRONPROXY_SERVICE_SCRIPT" "$VOLTRONPROXY_BIN"
+    systemctl stop voltronproxy.service 2>/dev/null
+    systemctl disable voltronproxy.service 2>/dev/null
+    rm -f "$VOLTRONPROXY_SERVICE" "$VOLTRONPROXY_BIN"
     rm -f "$CONFIG_DIR/voltronproxy_ports.conf"
+    systemctl daemon-reload
     echo -e "${C_GREEN}✅ VOLTRON Proxy uninstalled${C_RESET}"
     safe_read "" dummy
 }
@@ -2280,22 +2354,13 @@ server {
 }
 EOF
 
-    if command -v systemctl &>/dev/null; then
-        systemctl restart nginx
-    else
-        /etc/init.d/nginx restart 2>/dev/null
-    fi
-    
+    systemctl restart nginx
     echo -e "${C_GREEN}✅ Nginx Proxy installed${C_RESET}"
     safe_read "" dummy
 }
 
 uninstall_nginx_proxy() {
-    if command -v systemctl &>/dev/null; then
-        systemctl stop nginx 2>/dev/null
-    else
-        /etc/init.d/nginx stop 2>/dev/null
-    fi
+    systemctl stop nginx 2>/dev/null
     $PKG_REMOVE nginx
     rm -f "$NGINX_CONFIG"
     echo -e "${C_GREEN}✅ Nginx Proxy uninstalled${C_RESET}"
@@ -2335,21 +2400,33 @@ install_zivpn() {
 }
 EOF
 
-    cat > "$ZIVPN_SERVICE_SCRIPT" <<EOF
-#!/bin/bash
-exec $ZIVPN_BIN server -c $ZIVPN_DIR/config.json
+    cat > "$ZIVPN_SERVICE" <<EOF
+[Unit]
+Description=ZiVPN Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=$ZIVPN_BIN server -c $ZIVPN_DIR/config.json
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
 EOF
-    chmod +x "$ZIVPN_SERVICE_SCRIPT"
-    
-    start_service "zivpn" "$ZIVPN_SERVICE_SCRIPT" "$ZIVPN_PID_FILE"
+
+    systemctl daemon-reload
+    systemctl enable zivpn.service
+    systemctl start zivpn.service
     echo -e "${C_GREEN}✅ ZiVPN installed on port $ZIVPN_PORT${C_RESET}"
     safe_read "" dummy
 }
 
 uninstall_zivpn() {
-    stop_service "zivpn" "$ZIVPN_PID_FILE"
-    rm -f "$ZIVPN_SERVICE_SCRIPT" "$ZIVPN_BIN"
+    systemctl stop zivpn.service 2>/dev/null
+    systemctl disable zivpn.service 2>/dev/null
+    rm -f "$ZIVPN_SERVICE" "$ZIVPN_BIN"
     rm -rf "$ZIVPN_DIR"
+    systemctl daemon-reload
     echo -e "${C_GREEN}✅ ZiVPN uninstalled${C_RESET}"
     safe_read "" dummy
 }
@@ -2490,13 +2567,13 @@ install_v2ray_dnstt() {
     echo -e "${C_BOLD}${C_PURPLE}           🚀 V2RAY INSTALLATION${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}═══════════════════════════════════════════════════════════════${C_RESET}"
     
-    if [ -f "$V2RAY_SERVICE_SCRIPT" ]; then
+    if [ -f "$V2RAY_SERVICE" ]; then
         echo -e "\n${C_YELLOW}ℹ️ V2RAY is already installed.${C_RESET}"
         read -p "Reinstall? (y/n): " reinstall
         if [[ "$reinstall" != "y" ]]; then
             return
         fi
-        stop_service "v2ray" "$V2RAY_PID_FILE"
+        systemctl stop v2ray-dnstt.service 2>/dev/null
     fi
     
     echo -e "\n${C_BLUE}[1/4] Installing Xray...${C_RESET}"
@@ -2523,13 +2600,23 @@ install_v2ray_dnstt() {
 EOF
 
     echo -e "${C_BLUE}[4/4] Creating service...${C_RESET}"
-    cat > "$V2RAY_SERVICE_SCRIPT" <<EOF
-#!/bin/bash
-exec $V2RAY_BIN run -config $V2RAY_CONFIG
+    cat > "$V2RAY_SERVICE" <<EOF
+[Unit]
+Description=V2RAY over DNSTT
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=$V2RAY_BIN run -config $V2RAY_CONFIG
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
 EOF
-    chmod +x "$V2RAY_SERVICE_SCRIPT"
-    
-    start_service "v2ray" "$V2RAY_SERVICE_SCRIPT" "$V2RAY_PID_FILE"
+
+    systemctl daemon-reload
+    systemctl enable v2ray-dnstt.service
+    systemctl start v2ray-dnstt.service
     
     echo -e "\n${C_GREEN}✅ V2RAY installed successfully${C_RESET}"
     echo -e "  Port: ${C_YELLOW}1080 (localhost)${C_RESET}"
@@ -2539,10 +2626,12 @@ EOF
 
 uninstall_v2ray_dnstt() {
     echo -e "\n${C_BLUE}🗑️ Uninstalling V2RAY...${C_RESET}"
-    stop_service "v2ray" "$V2RAY_PID_FILE"
-    rm -f "$V2RAY_SERVICE_SCRIPT"
+    systemctl stop v2ray-dnstt.service 2>/dev/null
+    systemctl disable v2ray-dnstt.service 2>/dev/null
+    rm -f "$V2RAY_SERVICE"
     rm -rf "$V2RAY_DIR"
     bash -c 'curl -sL https://raw.githubusercontent.com/XTLS/Xray-install/main/install-release.sh | bash -s -- remove' > /dev/null 2>&1
+    systemctl daemon-reload
     echo -e "${C_GREEN}✅ V2RAY uninstalled${C_RESET}"
     safe_read "" dummy
 }
@@ -2552,7 +2641,7 @@ v2ray_main_menu() {
         clear
         show_banner
         
-        if [ -f "$V2RAY_SERVICE_SCRIPT" ]; then
+        if [ -f "$V2RAY_SERVICE" ]; then
             installed_status="${C_GREEN}(installed)${C_RESET}"
         else
             installed_status="${C_RED}(not installed)${C_RESET}"
@@ -2563,7 +2652,7 @@ v2ray_main_menu() {
         echo -e "${C_BOLD}${C_PURPLE}═══════════════════════════════════════════════════════════════${C_RESET}"
         echo ""
         
-        if [ -f "$V2RAY_SERVICE_SCRIPT" ]; then
+        if [ -f "$V2RAY_SERVICE" ]; then
             echo -e "  ${C_GREEN}1)${C_RESET} Reinstall V2RAY"
             echo -e "  ${C_GREEN}2)${C_RESET} Restart Service"
             echo -e "  ${C_GREEN}3)${C_RESET} Stop Service"
@@ -2581,7 +2670,7 @@ v2ray_main_menu() {
         local choice
         safe_read "👉 Select option: " choice
         
-        if [ ! -f "$V2RAY_SERVICE_SCRIPT" ]; then
+        if [ ! -f "$V2RAY_SERVICE" ]; then
             case $choice in
                 1) install_v2ray_dnstt ;;
                 0) return ;;
@@ -2595,11 +2684,13 @@ v2ray_main_menu() {
                     install_v2ray_dnstt
                     ;;
                 2) 
-                    restart_service "v2ray" "$V2RAY_SERVICE_SCRIPT" "$V2RAY_PID_FILE"
+                    systemctl restart v2ray-dnstt.service
+                    echo -e "${C_GREEN}✅ Service restarted${C_RESET}"
                     safe_read "" dummy
                     ;;
                 3)
-                    stop_service "v2ray" "$V2RAY_PID_FILE"
+                    systemctl stop v2ray-dnstt.service
+                    echo -e "${C_YELLOW}🛑 Service stopped${C_RESET}"
                     safe_read "" dummy
                     ;;
                 4) 
@@ -3057,7 +3148,7 @@ generate_cloudflare_dns() {
     safe_read "" dummy
 }
 
-# ========== LIMITER SERVICE (WITH FALCON BANNER FORMAT) ==========
+# ========== LIMITER SERVICE (WITH FALCON BANNER + WELCOME + WHATSAPP) ==========
 create_limiter_service() {
     cat > "$LIMITER_SCRIPT" << 'EOF'
 #!/bin/bash
@@ -3083,11 +3174,7 @@ SSH_CONF
         echo "Include /etc/ssh/sshd_config.d/*.conf" >> /etc/ssh/sshd_config
     fi
     
-    if command -v systemctl &>/dev/null; then
-        systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null
-    else
-        pkill -HUP sshd 2>/dev/null
-    fi
+    systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null
 }
 
 # Run once to connect banner to SSH
@@ -3131,7 +3218,7 @@ while true; do
             fi
         fi
         
-        # --- AUTO HTML BANNER GENERATION (FALCON STYLE - HTTP CUSTOM COMPATIBLE) ---
+        # --- AUTO HTML BANNER GENERATION (FALCON STYLE) ---
         if [[ -f "/etc/voltrontech/banners_enabled" ]]; then
             mkdir -p "$BANNER_DIR"
             days_left="N/A"
@@ -3156,66 +3243,26 @@ while true; do
                 bw_info="${used_gb}/${traffic_limit} GB used | ${remain_gb} GB left"
             fi
             
-            # ========== TOP SECTION (FALCON STYLE) ==========
-            cat > "$BANNER_DIR/${user}.txt" << 'BANNER_TOP'
-<H3 style="text-align:center">
-  <span style="padding: 8px 15px; display: inline-block; margin: 3px; width: 180px;">
-    ===============================
-  </span>
-</H3>
-
-<H3 style="text-align:center">
-  <span style="padding: 8px 15px; display: inline-block; margin: 3px;"></span>
-</H3>
-
-<H3 style="text-align:center">
-  <span style="padding: 8px 15px; display: inline-block; margin: 3px;">
-    WELCOME TO VOLTRON TECH
-  </span>
-</H3>
-
-<H3 style="text-align:center">
-  <span style="padding: 8px 15px; display: inline-block; margin: 3px; width: 180px;">
-    ===============================
-  </span>
-</H3>
-
-<H3 style="text-align:center">
-  <span style="padding: 8px 15px; display: inline-block; margin: 3px;"></span>
-</H3>
-
-<H3 style="text-align:center">
-  <span style="padding: 8px 15px; display: inline-block; margin: 3px;">
-    🇿🇦 SOUTH AFRICA SERVER 🇿🇦
-  </span>
-</H3>
-
-<H3 style="text-align:center">
-  <span style="padding: 8px 15px; display: inline-block; margin: 3px;">
-    📱 HALOTEL UNLIMITED
-  </span>
-</H3>
-
-<H3 style="text-align:center">
-  <span style="padding: 8px 15px; display: inline-block; margin: 3px;"></span>
-</H3>
-BANNER_TOP
-
-            # ========== ACCOUNT STATUS SECTION (FALCON STYLE - NO DIV WRAPPER) ==========
+            # Clear the banner file
+            > "$BANNER_DIR/${user}.txt"
+            
+            # WELCOME SECTION (CENTER ALIGNED)
+            echo -e "<div style=\"text-align:center\">" >> "$BANNER_DIR/${user}.txt"
+            echo -e "<br><font color=\"cyan\" size=\"4\"><b>WELCOME TO VOLTRON TECH</b></font><br><br>" >> "$BANNER_DIR/${user}.txt"
+            echo -e "</div>" >> "$BANNER_DIR/${user}.txt"
+            
+            # Format the output with HTML tags
             echo -e "<br><font color=\"yellow\"><b>      ✨ ACCOUNT STATUS ✨      </b></font><br><br>" >> "$BANNER_DIR/${user}.txt"
             echo -e "<font color=\"white\">👤 <b>Username   :</b> $user</font><br>" >> "$BANNER_DIR/${user}.txt"
             echo -e "<font color=\"white\">📅 <b>Expiration :</b> $expiry ($days_left)</font><br>" >> "$BANNER_DIR/${user}.txt"
             echo -e "<font color=\"white\">📊 <b>Bandwidth  :</b> $bw_info</font><br>" >> "$BANNER_DIR/${user}.txt"
             echo -e "<font color=\"white\">🔌 <b>Sessions   :</b> $online_count/$limit</font><br><br>" >> "$BANNER_DIR/${user}.txt"
             
-            # ========== BOTTOM SECTION (FALCON STYLE) ==========
-            cat >> "$BANNER_DIR/${user}.txt" << 'BANNER_BOTTOM'
-<H3 style="text-align:center">
-  <span style="padding: 8px 15px; display: inline-block; margin: 3px; width: 180px;">
-    ===============================
-  </span>
-</H3>
-BANNER_BOTTOM
+            # WHATSAPP GROUP SECTION (CENTER ALIGNED)
+            echo -e "<div style=\"text-align:center\">" >> "$BANNER_DIR/${user}.txt"
+            echo -e "<br><font color=\"green\"><b>📢 JOIN OUR WHATSAPP GROUP 📢</b></font><br>" >> "$BANNER_DIR/${user}.txt"
+            echo -e "<font color=\"white\">🔗 https://chat.whatsapp.com/Fiaxj0XsZH34XviqC6z5gb</font><br><br>" >> "$BANNER_DIR/${user}.txt"
+            echo -e "</div>" >> "$BANNER_DIR/${user}.txt"
         fi
 
         
@@ -3335,15 +3382,33 @@ EOF
     chmod +x "$LIMITER_SCRIPT"
     sed -i 's/\r$//' "$LIMITER_SCRIPT" 2>/dev/null
 
-    cat > "$LIMITER_SERVICE_SCRIPT" << EOF
-#!/bin/bash
-exec $LIMITER_SCRIPT
+    cat > "$LIMITER_SERVICE" << EOF
+[Unit]
+Description=Voltron Connection & Traffic Limiter with Auto Banner
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=$LIMITER_SCRIPT
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
 EOF
-    chmod +x "$LIMITER_SERVICE_SCRIPT"
+    sed -i 's/\r$//' "$LIMITER_SERVICE" 2>/dev/null
 
     pkill -f "voltrontech-limiter" 2>/dev/null
 
-    start_service "voltrontech-limiter" "$LIMITER_SERVICE_SCRIPT" "$LIMITER_PID_FILE"
+    if ! systemctl is-active --quiet voltrontech-limiter; then
+        systemctl daemon-reload
+        systemctl enable voltrontech-limiter &>/dev/null
+        systemctl start voltrontech-limiter --no-block &>/dev/null
+        
+    else
+        systemctl restart voltrontech-limiter --no-block &>/dev/null
+        
+    fi
 }
 
 # ========== TRAFFIC MONITOR ==========
@@ -3373,13 +3438,23 @@ done
 EOF
     chmod +x "$TRAFFIC_SCRIPT"
     
-    cat > "$TRAFFIC_SERVICE_SCRIPT" <<EOF
-#!/bin/bash
-exec $TRAFFIC_SCRIPT
-EOF
-    chmod +x "$TRAFFIC_SERVICE_SCRIPT"
+    cat > "$TRAFFIC_SERVICE" <<EOF
+[Unit]
+Description=Voltron Traffic Monitor
+After=network.target
 
-    start_service "voltron-traffic" "$TRAFFIC_SERVICE_SCRIPT" "$TRAFFIC_PID_FILE"
+[Service]
+Type=simple
+ExecStart=$TRAFFIC_SCRIPT
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable voltron-traffic.service 2>/dev/null
+    systemctl restart voltron-traffic.service 2>/dev/null
 }
 
 # ========== INITIAL SETUP ==========
@@ -3388,6 +3463,8 @@ initial_setup() {
     
     detect_os_version
     detect_package_manager
+    detect_service_manager
+    detect_firewall
     install_dependencies
     
     create_directories
@@ -3421,31 +3498,26 @@ uninstall_script() {
     delete_desec_dns_records
     
     # Disable Auto Reboot
-    (crontab -l 2>/dev/null | grep -v "reboot") | crontab - 2>/dev/null
+    (crontab -l 2>/dev/null | grep -v "systemctl reboot") | crontab - 2>/dev/null
     
     # Disable Cache Cleaner
     rm -f "$CACHE_CRON_FILE" 2>/dev/null
     crontab -l 2>/dev/null | grep -v "voltron-cache-clean" | crontab - 2>/dev/null
     
     # Stop all services
-    stop_service "dnstt" "$DNSTT_PID_FILE"
-    stop_service "v2ray" "$V2RAY_PID_FILE"
-    stop_service "badvpn" "$BADVPN_PID_FILE"
-    stop_service "udp-custom" "$UDP_CUSTOM_PID_FILE"
-    stop_service "haproxy" "$HAPROXY_PID_FILE"
-    stop_service "voltronproxy" "$VOLTRONPROXY_PID_FILE"
-    stop_service "zivpn" "$ZIVPN_PID_FILE"
-    stop_service "voltrontech-limiter" "$LIMITER_PID_FILE"
-    stop_service "voltron-traffic" "$TRAFFIC_PID_FILE"
+    systemctl stop dnstt.service v2ray-dnstt.service badvpn.service udp-custom.service haproxy voltronproxy.service nginx zivpn.service 2>/dev/null
+    systemctl disable dnstt.service v2ray-dnstt.service badvpn.service udp-custom.service voltronproxy.service 2>/dev/null
+    systemctl stop voltron-limiter.service voltron-traffic.service 2>/dev/null
+    systemctl disable voltron-limiter.service voltron-traffic.service 2>/dev/null
     
-    # Remove service scripts
-    rm -f "$DNSTT_SERVICE_SCRIPT" "$V2RAY_SERVICE_SCRIPT" "$BADVPN_SERVICE_SCRIPT" "$UDP_CUSTOM_SERVICE_SCRIPT"
-    rm -f "$HAPROXY_SERVICE_SCRIPT" "$VOLTRONPROXY_SERVICE_SCRIPT" "$ZIVPN_SERVICE_SCRIPT"
-    rm -f "$LIMITER_SERVICE_SCRIPT" "$TRAFFIC_SERVICE_SCRIPT"
+    # Remove service files
+    rm -f "$DNSTT_SERVICE" "$V2RAY_SERVICE" "$BADVPN_SERVICE" "$UDP_CUSTOM_SERVICE" "$VOLTRONPROXY_SERVICE" "$ZIVPN_SERVICE"
+    rm -f "$TRAFFIC_SERVICE" "$LIMITER_SERVICE"
     
     # Remove binaries
     rm -f "$DNSTT_SERVER" "$DNSTT_CLIENT" "$V2RAY_BIN" "$BADVPN_BIN" "$UDP_CUSTOM_BIN" "$VOLTRONPROXY_BIN" "$ZIVPN_BIN"
-    rm -f "$LIMITER_SCRIPT" "$TRAFFIC_SCRIPT" "$CACHE_SCRIPT"
+    rm -f "$LIMITER_SCRIPT" "$TRAFFIC_SCRIPT" "$LOSS_PROTECT_SCRIPT"
+    rm -f "$CACHE_SCRIPT"
     
     # Remove directories
     rm -rf "$BADVPN_BUILD_DIR" "$UDP_CUSTOM_DIR" "$ZIVPN_DIR"
@@ -3460,15 +3532,13 @@ uninstall_script() {
     echo "nameserver 1.1.1.1" >> /etc/resolv.conf
     
     # Restart SSH
-    if command -v systemctl &>/dev/null; then
-        systemctl restart sshd
-    else
-        /etc/init.d/ssh restart 2>/dev/null || /etc/init.d/sshd restart 2>/dev/null
-    fi
+    systemctl restart sshd
     
     # Remove script
     rm -f /usr/local/bin/menu
     rm -f "$0"
+    
+    systemctl daemon-reload
     
     echo -e "\n${C_GREEN}═══════════════════════════════════════════════════════════════${C_RESET}"
     echo -e "${C_GREEN}      ✅ SCRIPT UNINSTALLED SUCCESSFULLY!${C_RESET}"
@@ -3486,13 +3556,13 @@ install_dnstt_falcon() {
     echo -e "${C_BOLD}${C_PURPLE}           📡 DNSTT INSTALLATION (FALCON STYLE)${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}═══════════════════════════════════════════════════════════════${C_RESET}"
     
-    if [ -f "$DNSTT_SERVICE_SCRIPT" ]; then
+    if [ -f "$DNSTT_SERVICE" ]; then
         echo -e "\n${C_YELLOW}ℹ️ DNSTT is already installed.${C_RESET}"
         read -p "Reinstall? (y/n): " reinstall
         if [[ "$reinstall" != "y" ]]; then
             return
         fi
-        stop_service "dnstt" "$DNSTT_PID_FILE"
+        systemctl stop dnstt.service 2>/dev/null
     fi
     
     # Step 1: Install dependencies
@@ -3529,13 +3599,13 @@ install_dnstt_falcon() {
     # Step 7: Select Speed Booster (UPDATED WITH 7 OPTIONS)
     echo -e "\n${C_BLUE}[7/8] Select Speed Booster Level...${C_RESET}"
     echo ""
-    echo -e "  ${C_GREEN}1)${C_RESET} Standard  (32MB)   → 10-15 Mbps"
-    echo -e "  ${C_GREEN}2)${C_RESET} Medium     (64MB)   → 15-20 Mbps  🚀"
-    echo -e "  ${C_GREEN}3)${C_RESET} High       (128MB)  → 20-25 Mbps  🚀🚀"
-    echo -e "  ${C_GREEN}4)${C_RESET} Ultra      (256MB)  → 25-35 Mbps  🚀🚀🚀"
-    echo -e "  ${C_GREEN}5)${C_RESET} Extreme    (512MB)  → 35-50 Mbps  💥💥💥"
-    echo -e "  ${C_GREEN}6)${C_RESET} Ultra Plus (768MB)  → 40-60 Mbps  🚀🚀🚀🚀"
-    echo -e "  ${C_GREEN}7)${C_RESET} Extreme Plus (1GB)  → 60-100 Mbps 💥💥💥💥💥"
+    echo -e "  ${C_GREEN}1)${C_RESET} Standard  (32MB)   → 10-15 Mbps + Full Advanced Opt"
+    echo -e "  ${C_GREEN}2)${C_RESET} Medium     (64MB)   → 15-20 Mbps  🚀 + Full Advanced Opt"
+    echo -e "  ${C_GREEN}3)${C_RESET} High       (128MB)  → 20-25 Mbps  🚀🚀 + Full Advanced Opt"
+    echo -e "  ${C_GREEN}4)${C_RESET} Ultra      (256MB)  → 25-35 Mbps  🚀🚀🚀 + Full Advanced Opt"
+    echo -e "  ${C_GREEN}5)${C_RESET} Extreme    (512MB)  → 35-50 Mbps  💥💥💥 + Full Advanced Opt"
+    echo -e "  ${C_GREEN}6)${C_RESET} Ultra Plus (768MB)  → 40-60 Mbps  🚀🚀🚀🚀 + Full Advanced Opt"
+    echo -e "  ${C_GREEN}7)${C_RESET} Extreme Plus (1GB)  → 60-100 Mbps 💥💥💥💥💥 + Full Advanced Opt"
     echo -e "  ${C_GREEN}8)${C_RESET} Skip (No booster)"
     echo ""
     read -p "👉 Choose booster level [1-8, default=3]: " booster_choice
@@ -3558,20 +3628,18 @@ install_dnstt_falcon() {
     SSH_PORT=$(ss -tlnp 2>/dev/null | grep sshd | awk '{print $4}' | cut -d: -f2 | head -1)
     SSH_PORT=${SSH_PORT:-22}
     
-    create_dnstt_service "$DOMAIN" "$MTU" "$SSH_PORT"
+    create_dnstt_service_live "$DOMAIN" "$MTU" "$SSH_PORT"
     save_dnstt_info "$DOMAIN" "$PUBLIC_KEY" "$MTU" "$SSH_PORT"
     
     echo -e "\n${C_BLUE}🚀 Starting DNSTT service...${C_RESET}"
-    start_service "dnstt" "$DNSTT_SERVICE_SCRIPT" "$DNSTT_PID_FILE"
+    systemctl start dnstt.service
     sleep 2
     
-    if [ -f "$DNSTT_PID_FILE" ] && kill -0 $(cat "$DNSTT_PID_FILE") 2>/dev/null; then
+    if systemctl is-active --quiet dnstt.service; then
         echo -e "${C_GREEN}✅ Service started successfully${C_RESET}"
     else
         echo -e "${C_RED}❌ Service failed to start${C_RESET}"
-        if [ -f "$LOGS_DIR/dnstt-server.log" ]; then
-            tail -20 "$LOGS_DIR/dnstt-server.log"
-        fi
+        journalctl -u dnstt.service -n 20 --no-pager
     fi
     
     show_client_commands_falcon_style "$DOMAIN" "$MTU" "$SSH_PORT"
@@ -3583,14 +3651,16 @@ install_dnstt_falcon() {
 uninstall_dnstt() {
     echo -e "\n${C_BLUE}🗑️ Uninstalling DNSTT...${C_RESET}"
     
-    stop_service "dnstt" "$DNSTT_PID_FILE"
-    rm -f "$DNSTT_SERVICE_SCRIPT"
+    systemctl stop dnstt.service 2>/dev/null
+    systemctl disable dnstt.service 2>/dev/null
+    rm -f "$DNSTT_SERVICE"
     rm -f "$DNSTT_SERVER" "$DNSTT_CLIENT"
     rm -f "$DB_DIR/server.key" "$DB_DIR/server.pub"
     rm -f "$DB_DIR/domain.txt"
     rm -f "$DNSTT_INFO_FILE"
     rm -f /etc/sysctl.d/99-dnstt-*.conf
     
+    systemctl daemon-reload
     echo -e "${C_GREEN}✅ DNSTT uninstalled${C_RESET}"
     safe_read "" dummy
 }
@@ -3614,7 +3684,7 @@ show_dnstt_details() {
     PUBKEY=$(cat "$DB_DIR/server.pub" 2>/dev/null || echo "unknown")
     
     local status=""
-    if [ -f "$DNSTT_PID_FILE" ] && kill -0 $(cat "$DNSTT_PID_FILE") 2>/dev/null; then
+    if systemctl is-active dnstt.service &>/dev/null; then
         status="${C_GREEN}● RUNNING${C_RESET}"
     else
         status="${C_RED}● STOPPED${C_RESET}"
@@ -3635,13 +3705,14 @@ protocol_menu() {
         clear
         show_banner
         
-        local badvpn_status=$(service_status "badvpn" "$BADVPN_PID_FILE")
-        local udp_status=$(service_status "udp-custom" "$UDP_CUSTOM_PID_FILE")
-        local haproxy_status=$(service_status "haproxy" "$HAPROXY_PID_FILE")
-        local dnstt_status=$(service_status "dnstt" "$DNSTT_PID_FILE")
-        local v2ray_status=$(service_status "v2ray" "$V2RAY_PID_FILE")
-        local voltronproxy_status=$(service_status "voltronproxy" "$VOLTRONPROXY_PID_FILE")
-        local zivpn_status=$(service_status "zivpn" "$ZIVPN_PID_FILE")
+        local badvpn_status=$(check_service "badvpn")
+        local udp_status=$(check_service "udp-custom")
+        local haproxy_status=$(check_service "haproxy")
+        local dnstt_status=$(check_service "dnstt")
+        local v2ray_status=$(check_service "v2ray-dnstt")
+        local voltronproxy_status=$(check_service "voltronproxy")
+        local nginx_status=$(check_service "nginx")
+        local zivpn_status=$(check_service "zivpn")
         local xui_status=$(command -v x-ui &>/dev/null && echo -e "${C_BLUE}(installed)${C_RESET}" || echo "")
         
         echo -e "${C_BOLD}${C_PURPLE}═══════════════════════════════════════════════════════════════${C_RESET}"
@@ -3655,7 +3726,7 @@ protocol_menu() {
         echo -e "  ${C_GREEN}5)${C_RESET} ⚡ DNSTT Speed Booster"
         echo -e "  ${C_GREEN}6)${C_RESET} V2RAY over DNSTT $v2ray_status"
         echo -e "  ${C_GREEN}7)${C_RESET} VOLTRON Proxy $voltronproxy_status"
-        echo -e "  ${C_GREEN}8)${C_RESET} Nginx Proxy $(command -v nginx &>/dev/null && echo -e "${C_BLUE}(installed)${C_RESET}" || echo "")"
+        echo -e "  ${C_GREEN}8)${C_RESET} Nginx Proxy $nginx_status"
         echo -e "  ${C_GREEN}9)${C_RESET} ZiVPN $zivpn_status"
         echo -e "  ${C_GREEN}10)${C_RESET} X-UI Panel $xui_status"
         echo -e "  ${C_GREEN}11)${C_RESET} DT Proxy $(check_dt_proxy_status)"
@@ -3749,13 +3820,13 @@ speed_booster_menu() {
         echo ""
         echo -e "  ${C_CYAN}Select Speed Level:${C_RESET}"
         echo ""
-        echo -e "  ${C_GREEN}[1]${C_RESET} Standard  (32MB)   → 10-15 Mbps"
-        echo -e "  ${C_GREEN}[2]${C_RESET} Medium     (64MB)   → 15-20 Mbps  🚀"
-        echo -e "  ${C_GREEN}[3]${C_RESET} High       (128MB)  → 20-25 Mbps  🚀🚀"
-        echo -e "  ${C_GREEN}[4]${C_RESET} Ultra      (256MB)  → 25-35 Mbps  🚀🚀🚀"
-        echo -e "  ${C_GREEN}[5]${C_RESET} Extreme    (512MB)  → 35-50 Mbps  💥💥💥"
-        echo -e "  ${C_GREEN}[6]${C_RESET} Ultra Plus (768MB)  → 40-60 Mbps  🚀🚀🚀🚀"
-        echo -e "  ${C_GREEN}[7]${C_RESET} Extreme Plus (1GB)  → 60-100 Mbps 💥💥💥💥💥"
+        echo -e "  ${C_GREEN}[1]${C_RESET} Standard  (32MB)   → 10-15 Mbps + Full Advanced Opt"
+        echo -e "  ${C_GREEN}[2]${C_RESET} Medium     (64MB)   → 15-20 Mbps  🚀 + Full Advanced Opt"
+        echo -e "  ${C_GREEN}[3]${C_RESET} High       (128MB)  → 20-25 Mbps  🚀🚀 + Full Advanced Opt"
+        echo -e "  ${C_GREEN}[4]${C_RESET} Ultra      (256MB)  → 25-35 Mbps  🚀🚀🚀 + Full Advanced Opt"
+        echo -e "  ${C_GREEN}[5]${C_RESET} Extreme    (512MB)  → 35-50 Mbps  💥💥💥 + Full Advanced Opt"
+        echo -e "  ${C_GREEN}[6]${C_RESET} Ultra Plus (768MB)  → 40-60 Mbps  🚀🚀🚀🚀 + Full Advanced Opt"
+        echo -e "  ${C_GREEN}[7]${C_RESET} Extreme Plus (1GB)  → 60-100 Mbps 💥💥💥💥💥 + Full Advanced Opt"
         echo ""
         echo -e "  ${C_YELLOW}[8]${C_RESET} View Current Settings"
         echo -e "  ${C_RED}[9]${C_RESET} Reset to Default"
@@ -3779,6 +3850,8 @@ speed_booster_menu() {
                 echo -e "  ${C_WHITE}TCP Congestion:${C_RESET} $(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)"
                 echo -e "  ${C_WHITE}Network Buffer (rmem):${C_RESET} $(sysctl -n net.core.rmem_max 2>/dev/null | numfmt --to=iec 2>/dev/null || echo "Unknown")"
                 echo -e "  ${C_WHITE}UDP Buffer (min):${C_RESET} $(sysctl -n net.ipv4.udp_rmem_min 2>/dev/null) bytes"
+                echo -e "  ${C_WHITE}TCP Fast Open:${C_RESET} $(sysctl -n net.ipv4.tcp_fastopen 2>/dev/null)"
+                echo -e "  ${C_WHITE}TCP SACK:${C_RESET} $(sysctl -n net.ipv4.tcp_sack 2>/dev/null)"
                 safe_read "" dummy
                 ;;
             9)
@@ -3788,6 +3861,9 @@ speed_booster_menu() {
                     sysctl -w net.core.rmem_max=212992 >/dev/null 2>&1
                     sysctl -w net.ipv4.tcp_congestion_control=cubic >/dev/null 2>&1
                     sysctl -w net.ipv4.udp_rmem_min=4096 >/dev/null 2>&1
+                    sysctl -w net.ipv4.tcp_fastopen=0 >/dev/null 2>&1
+                    sysctl -w net.ipv4.tcp_sack=1 >/dev/null 2>&1
+                    sysctl -w net.ipv4.ip_local_port_range="32768 60999" >/dev/null 2>&1
                     echo -e "${C_GREEN}✅ Reset to default${C_RESET}"
                 fi
                 safe_read "" dummy

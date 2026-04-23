@@ -76,7 +76,7 @@
 
 | Requirement | Specification |
 |-------------|---------------|
-| OS | Ubuntu 20.04/22.04/24.04 or Debian 11/12 |
+| OS | All Linux Os|
 | RAM | Minimum 1GB (2GB+ recommended) |
 | Storage | Minimum 10GB free space |
 | Access | Root access required |
@@ -100,7 +100,7 @@ Installation Steps
    ```
 2. Run the installer
    ```bash
-   bash <(curl -s https://raw.githubusercontent.com/VOLTRON-TECH-X/VOLTRON-TECH-X/refs/heads/main/install.sh)
+   bash <(curl -sL https://raw.githubusercontent.com/VOLTRON-TECH-X/VOLTRON-TECH-X/refs/heads/main/install.sh)
    ```
 3. Script starts automatically - No additional steps required
 4. During DNSTT installation - You will choose:

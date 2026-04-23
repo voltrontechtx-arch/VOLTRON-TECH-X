@@ -1,10 +1,17 @@
 #!/bin/bash
 
 # ========== VOLTRON TECH ULTIMATE SCRIPT ==========
-# Version: 10.8 (FALCON BANNER + WELCOME + WHATSAPP)
+# Version: 10.8 (FULLY FIXED - HTTP CUSTOM COMPATIBLE)
 # Description: SSH • DNSTT • V2RAY • BADVPN • UDP • SSL • ZiVPN
 # Author: Voltron Tech
 # Supported: Ubuntu 20.04-24.10 • Debian 10-12 • CentOS 7-9 • Fedora 36-40
+# Changes: 
+#   - Fixed Auto HTML Banner (removed div wrapper, like Falcon)
+#   - Removed "ULTRA BOOST" and "Forcer" lines from main banner
+#   - Combined Location (City, Country) into one line
+#   - Auto Reboot works via cron (as in Falcon)
+#   - Speed booster menu shows all 7 levels (Standard to Extreme Plus)
+#   - Connection Forcer removed from main menu
 
 # ========== COLOR CODES ==========
 C_RESET='\033[0m'
@@ -64,12 +71,6 @@ BACKUP_DIR="$DB_DIR/backups"
 LOGS_DIR="$DB_DIR/logs"
 CONFIG_DIR="$DB_DIR/config"
 FEC_DIR="$DB_DIR/fec"
-
-# ========== CONNECTION FORCER CONFIG ==========
-FORCER_DIR="$DB_DIR/forcer"
-FORCER_CONFIG="$FORCER_DIR/config.conf"
-FORCER_HAPROXY_CFG="/etc/haproxy/haproxy.cfg"
-FORCER_BACKUP_DIR="$FORCER_DIR/backups"
 
 # ========== CACHE CLEANER CONFIG ==========
 CACHE_CRON_FILE="/etc/cron.d/voltron-cache-clean"
@@ -133,7 +134,6 @@ create_directories() {
     mkdir -p $V2RAY_DIR/dnstt $V2RAY_DIR/v2ray $V2RAY_DIR/users
     mkdir -p $UDP_CUSTOM_DIR $ZIVPN_DIR
     mkdir -p $(dirname "$SSH_BANNER_FILE")
-    mkdir -p "$FORCER_DIR" "$FORCER_BACKUP_DIR"
     mkdir -p "$DB_DIR/cache"
     touch $DB_FILE
     touch $V2RAY_USERS_DB
@@ -394,30 +394,35 @@ _is_valid_ipv6() {
     fi
 }
 
-# ========== SHOW BANNER ==========
+# ========== SHOW BANNER (UPDATED: REMOVED ULTRA BOOST & FORCER, COMBINED LOCATION) ==========
 show_banner() {
     clear
     get_ip_info
     local current_mtu=$(get_current_mtu)
     
+    # Combine location and country into one string
+    if [[ -n "$LOCATION" && "$LOCATION" != "Unknown" && -n "$COUNTRY" && "$COUNTRY" != "Unknown" ]]; then
+        LOCATION_FULL="$LOCATION, $COUNTRY"
+    elif [[ -n "$COUNTRY" && "$COUNTRY" != "Unknown" ]]; then
+        LOCATION_FULL="$COUNTRY"
+    elif [[ -n "$LOCATION" && "$LOCATION" != "Unknown" ]]; then
+        LOCATION_FULL="$LOCATION"
+    else
+        LOCATION_FULL="Unknown"
+    fi
+    
     echo -e "${C_BOLD}${C_PURPLE}╔═══════════════════════════════════════════════════════════════╗${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}║           🔥 VOLTRON TECH ULTIMATE v10.8 🔥                    ║${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}║        SSH • DNSTT • V2RAY • BADVPN • UDP • SSL • ZiVPN        ║${C_RESET}"
-    echo -e "${C_BOLD}${C_PURPLE}║              FALCON BANNER + WELCOME + WHATSAPP                ║${C_RESET}"
+    echo -e "${C_BOLD}${C_PURPLE}║                   FALCON STYLE EDITION                         ║${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}╠═══════════════════════════════════════════════════════════════╣${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}║  Server IP: ${C_GREEN}$IP${C_PURPLE}${C_RESET}"
-    echo -e "${C_BOLD}${C_PURPLE}║  Location:  ${C_GREEN}$LOCATION, $COUNTRY${C_PURPLE}${C_RESET}"
+    echo -e "${C_BOLD}${C_PURPLE}║  Location:  ${C_GREEN}$LOCATION_FULL${C_PURPLE}${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}║  ISP:       ${C_GREEN}$ISP${C_PURPLE}${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}║  Current MTU: ${C_GREEN}$current_mtu${C_PURPLE}${C_RESET}"
     echo -e "${C_BOLD}${C_PURPLE}║  OS:        ${C_GREEN}$OS_NAME${C_PURPLE}${C_RESET}"
-    echo -e "${C_BOLD}${C_PURPLE}║  ULTRA BOOST: ${C_GREEN}ACTIVE (10x speed mode)${C_PURPLE}${C_RESET}"
     
-    if [ -f "$FORCER_CONFIG" ]; then
-        source "$FORCER_CONFIG"
-        echo -e "${C_BOLD}${C_PURPLE}║  Forcer:     ${C_GREEN}ACTIVE (${CONNECTIONS_PER_IP} conn/IP)${C_PURPLE}${C_RESET}"
-    else
-        echo -e "${C_BOLD}${C_PURPLE}║  Forcer:     ${C_YELLOW}INACTIVE (1 conn/IP)${C_PURPLE}${C_RESET}"
-    fi
+    # Ultra Boost and Forcer lines removed as requested
     
     if [ -f "$CACHE_CRON_FILE" ]; then
         echo -e "${C_BOLD}${C_PURPLE}║  Cache:      ${C_GREEN}AUTO CLEAN ACTIVE (12:00 AM daily)${C_PURPLE}${C_RESET}"
@@ -478,7 +483,7 @@ download_dnstt_binary() {
     return 0
 }
 
-# ========== SPEED BOOSTERS (7 LEVELS - ALL WITH FULL ADVANCED OPTIMIZATIONS) ==========
+# ========== SPEED BOOSTERS (7 LEVELS - ALL WITH ADVANCED OPTIMIZATIONS) ==========
 apply_dnstt_standard() {
     echo -e "\n${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
     echo -e "${C_BLUE}           ⚡ STANDARD BOOSTER (32MB) + Advanced Optimizations${C_RESET}"
@@ -1099,7 +1104,7 @@ show_client_commands_falcon_style() {
     echo -e "${C_WHITE}  ssh username@127.0.0.1 -p $ssh_port${C_RESET}"
 }
 
-# ========== AUTO HTML BANNER FUNCTIONS (FALCON STYLE + WELCOME + WHATSAPP) ==========
+# ========== AUTO HTML BANNER FUNCTIONS (FALCON STYLE - FIXED, NO DIV WRAPPER) ==========
 _connect_auto_banner_to_ssh() {
     echo -e "\n${C_BLUE}🔗 Connecting Auto HTML Banner to SSH...${C_RESET}"
     
@@ -1131,7 +1136,11 @@ _enable_auto_banner() {
     
     _connect_auto_banner_to_ssh
     
-    # Force update of SSH config for all users
+    # Wait a moment for limiter to generate initial banners
+    echo -e "${C_YELLOW}⏳ Waiting for limiter to generate banners (5 seconds)...${C_RESET}"
+    sleep 5
+    
+    # Force update SSH config
     _update_ssh_banners_config
     
     echo -e "${C_GREEN}✅ Auto HTML Banner enabled!${C_RESET}"
@@ -1817,7 +1826,7 @@ client_config_menu() {
     generate_client_config "$u" "$pass"
 }
 
-# ========== SSH BANNER CONFIG (FALCON STYLE) ==========
+# ========== SSH BANNER CONFIG (FALCON STYLE - FIXED) ==========
 _update_ssh_banners_config() {
     echo -e "${C_BLUE}🔧 Updating SSH banner configuration...${C_RESET}"
     
@@ -1842,7 +1851,12 @@ _update_ssh_banners_config() {
         [[ -z "$user" || "$user" == \#* ]] && continue
         
         if [[ ! -f "/etc/voltrontech/banners/${user}.txt" ]]; then
-            echo "Waiting for limiter to generate banner..." > "/etc/voltrontech/banners/${user}.txt"
+            echo -e "${C_YELLOW}⚠️ Banner for $user not found, waiting 5 seconds...${C_RESET}"
+            sleep 5
+            if [[ ! -f "/etc/voltrontech/banners/${user}.txt" ]]; then
+                echo -e "${C_YELLOW}⚠️ Banner still missing, creating placeholder...${C_RESET}"
+                echo "Waiting for limiter to generate banner..." > "/etc/voltrontech/banners/${user}.txt"
+            fi
         fi
         
         cat >> /etc/ssh/sshd_config.d/voltron-banners.conf <<EOF
@@ -1943,15 +1957,17 @@ auto_banner_menu() {
     done
 }
 
-# ========== AUTO REBOOT FUNCTIONS ==========
+# ========== AUTO REBOOT FUNCTIONS (FALCON STYLE - CRON BASED) ==========
 _enable_auto_reboot() {
     echo -e "\n${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
     echo -e "${C_BLUE}           🔄 ENABLING AUTO REBOOT${C_RESET}"
     echo -e "${C_BLUE}           ⏰ Schedule: Daily at 00:00 (Midnight)${C_RESET}"
     echo -e "${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
     
-    (crontab -l 2>/dev/null | grep -v "systemctl reboot") | crontab - 2>/dev/null
-    (crontab -l 2>/dev/null; echo "0 0 * * * /usr/sbin/systemctl reboot") | crontab - 2>/dev/null
+    # Remove existing reboot entries to avoid duplicates
+    (crontab -l 2>/dev/null | grep -v "reboot") | crontab - 2>/dev/null
+    # Add new reboot job at midnight
+    (crontab -l 2>/dev/null; echo "0 0 * * * /sbin/reboot") | crontab - 2>/dev/null
     
     echo -e "${C_GREEN}✅ Auto reboot scheduled for every day at 00:00 (Midnight)${C_RESET}"
     safe_read "" dummy
@@ -1962,7 +1978,8 @@ _disable_auto_reboot() {
     echo -e "${C_BLUE}           🛑 DISABLING AUTO REBOOT${C_RESET}"
     echo -e "${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
     
-    (crontab -l 2>/dev/null | grep -v "systemctl reboot") | crontab - 2>/dev/null
+    # Remove reboot entries from crontab
+    (crontab -l 2>/dev/null | grep -v "reboot") | crontab - 2>/dev/null
     
     echo -e "${C_GREEN}✅ Auto reboot disabled${C_RESET}"
     safe_read "" dummy
@@ -1973,7 +1990,7 @@ _view_auto_reboot_status() {
     show_banner
     echo -e "${C_BOLD}${C_PURPLE}--- 🔄 Auto Reboot Status ---${C_RESET}"
     
-    local cron_check=$(crontab -l 2>/dev/null | grep "systemctl reboot")
+    local cron_check=$(crontab -l 2>/dev/null | grep "reboot")
     if [[ -n "$cron_check" ]]; then
         echo -e "\n${C_GREEN}✅ Auto Reboot: ENABLED${C_RESET}"
         echo -e "${C_CYAN}📌 Schedule: Daily at 00:00 (Midnight)${C_RESET}"
@@ -1990,7 +2007,7 @@ auto_reboot_menu() {
         show_banner
         
         local reboot_status=""
-        local cron_check=$(crontab -l 2>/dev/null | grep "systemctl reboot")
+        local cron_check=$(crontab -l 2>/dev/null | grep "reboot")
         if [[ -n "$cron_check" ]]; then
             reboot_status="${C_GREEN}ENABLED (Daily at 00:00)${C_RESET}"
         else
@@ -3130,15 +3147,6 @@ cache_cleaner_menu() {
     done
 }
 
-# ========== CONNECTION FORCER ==========
-connection_forcer_menu() {
-    echo -e "\n${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_BLUE}           🔗 CONNECTION FORCER${C_RESET}"
-    echo -e "${C_BLUE}═══════════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_YELLOW}⚠️ Coming soon...${C_RESET}"
-    safe_read "" dummy
-}
-
 # ========== LEGACY CLOUDFLARE DNS ==========
 generate_cloudflare_dns() {
     clear
@@ -3148,7 +3156,7 @@ generate_cloudflare_dns() {
     safe_read "" dummy
 }
 
-# ========== LIMITER SERVICE (WITH FALCON BANNER + WELCOME + WHATSAPP) ==========
+# ========== LIMITER SERVICE (WITH FALCON BANNER + WELCOME + WHATSAPP - NO DIV) ==========
 create_limiter_service() {
     cat > "$LIMITER_SCRIPT" << 'EOF'
 #!/bin/bash
@@ -3218,7 +3226,7 @@ while true; do
             fi
         fi
         
-        # --- AUTO HTML BANNER GENERATION (FALCON STYLE) ---
+        # --- AUTO HTML BANNER GENERATION (FALCON STYLE - NO DIV) ---
         if [[ -f "/etc/voltrontech/banners_enabled" ]]; then
             mkdir -p "$BANNER_DIR"
             days_left="N/A"
@@ -3246,23 +3254,19 @@ while true; do
             # Clear the banner file
             > "$BANNER_DIR/${user}.txt"
             
-            # WELCOME SECTION (CENTER ALIGNED)
-            echo -e "<div style=\"text-align:center\">" >> "$BANNER_DIR/${user}.txt"
+            # WELCOME SECTION (NO DIV)
             echo -e "<br><font color=\"cyan\" size=\"4\"><b>WELCOME TO VOLTRON TECH</b></font><br><br>" >> "$BANNER_DIR/${user}.txt"
-            echo -e "</div>" >> "$BANNER_DIR/${user}.txt"
             
-            # Format the output with HTML tags
+            # Format the output with HTML tags (FALCON STYLE - NO DIV)
             echo -e "<br><font color=\"yellow\"><b>      ✨ ACCOUNT STATUS ✨      </b></font><br><br>" >> "$BANNER_DIR/${user}.txt"
             echo -e "<font color=\"white\">👤 <b>Username   :</b> $user</font><br>" >> "$BANNER_DIR/${user}.txt"
             echo -e "<font color=\"white\">📅 <b>Expiration :</b> $expiry ($days_left)</font><br>" >> "$BANNER_DIR/${user}.txt"
             echo -e "<font color=\"white\">📊 <b>Bandwidth  :</b> $bw_info</font><br>" >> "$BANNER_DIR/${user}.txt"
             echo -e "<font color=\"white\">🔌 <b>Sessions   :</b> $online_count/$limit</font><br><br>" >> "$BANNER_DIR/${user}.txt"
             
-            # WHATSAPP GROUP SECTION (CENTER ALIGNED)
-            echo -e "<div style=\"text-align:center\">" >> "$BANNER_DIR/${user}.txt"
+            # WHATSAPP GROUP SECTION (NO DIV)
             echo -e "<br><font color=\"green\"><b>📢 JOIN OUR WHATSAPP GROUP 📢</b></font><br>" >> "$BANNER_DIR/${user}.txt"
             echo -e "<font color=\"white\">🔗 https://chat.whatsapp.com/Fiaxj0XsZH34XviqC6z5gb</font><br><br>" >> "$BANNER_DIR/${user}.txt"
-            echo -e "</div>" >> "$BANNER_DIR/${user}.txt"
         fi
 
         
@@ -3498,7 +3502,7 @@ uninstall_script() {
     delete_desec_dns_records
     
     # Disable Auto Reboot
-    (crontab -l 2>/dev/null | grep -v "systemctl reboot") | crontab - 2>/dev/null
+    (crontab -l 2>/dev/null | grep -v "reboot") | crontab - 2>/dev/null
     
     # Disable Cache Cleaner
     rm -f "$CACHE_CRON_FILE" 2>/dev/null
@@ -3596,16 +3600,16 @@ install_dnstt_falcon() {
     echo -e "\n${C_BLUE}[6/8] Generating keys...${C_RESET}"
     generate_keys
     
-    # Step 7: Select Speed Booster (UPDATED WITH 7 OPTIONS)
+    # Step 7: Select Speed Booster (7 options as originally)
     echo -e "\n${C_BLUE}[7/8] Select Speed Booster Level...${C_RESET}"
     echo ""
-    echo -e "  ${C_GREEN}1)${C_RESET} Standard  (32MB)   → 10-15 Mbps + Full Advanced Opt"
-    echo -e "  ${C_GREEN}2)${C_RESET} Medium     (64MB)   → 15-20 Mbps  🚀 + Full Advanced Opt"
-    echo -e "  ${C_GREEN}3)${C_RESET} High       (128MB)  → 20-25 Mbps  🚀🚀 + Full Advanced Opt"
-    echo -e "  ${C_GREEN}4)${C_RESET} Ultra      (256MB)  → 25-35 Mbps  🚀🚀🚀 + Full Advanced Opt"
-    echo -e "  ${C_GREEN}5)${C_RESET} Extreme    (512MB)  → 35-50 Mbps  💥💥💥 + Full Advanced Opt"
-    echo -e "  ${C_GREEN}6)${C_RESET} Ultra Plus (768MB)  → 40-60 Mbps  🚀🚀🚀🚀 + Full Advanced Opt"
-    echo -e "  ${C_GREEN}7)${C_RESET} Extreme Plus (1GB)  → 60-100 Mbps 💥💥💥💥💥 + Full Advanced Opt"
+    echo -e "  ${C_GREEN}1)${C_RESET} Standard  (32MB)   → 10-15 Mbps"
+    echo -e "  ${C_GREEN}2)${C_RESET} Medium     (64MB)   → 15-20 Mbps  🚀"
+    echo -e "  ${C_GREEN}3)${C_RESET} High       (128MB)  → 20-25 Mbps  🚀🚀"
+    echo -e "  ${C_GREEN}4)${C_RESET} Ultra      (256MB)  → 25-35 Mbps  🚀🚀🚀"
+    echo -e "  ${C_GREEN}5)${C_RESET} Extreme    (512MB)  → 35-50 Mbps  💥💥💥"
+    echo -e "  ${C_GREEN}6)${C_RESET} Ultra Plus (768MB)  → 40-60 Mbps  🚀🚀🚀🚀"
+    echo -e "  ${C_GREEN}7)${C_RESET} Extreme Plus (1GB)  → 60-100 Mbps 💥💥💥💥💥"
     echo -e "  ${C_GREEN}8)${C_RESET} Skip (No booster)"
     echo ""
     read -p "👉 Choose booster level [1-8, default=3]: " booster_choice
@@ -3808,7 +3812,7 @@ protocol_menu() {
     done
 }
 
-# ========== SPEED BOOSTER MENU (WITH 7 OPTIONS) ==========
+# ========== SPEED BOOSTER MENU (WITH 7 OPTIONS - AS ORIGINAL) ==========
 speed_booster_menu() {
     while true; do
         clear
@@ -3820,13 +3824,13 @@ speed_booster_menu() {
         echo ""
         echo -e "  ${C_CYAN}Select Speed Level:${C_RESET}"
         echo ""
-        echo -e "  ${C_GREEN}[1]${C_RESET} Standard  (32MB)   → 10-15 Mbps + Full Advanced Opt"
-        echo -e "  ${C_GREEN}[2]${C_RESET} Medium     (64MB)   → 15-20 Mbps  🚀 + Full Advanced Opt"
-        echo -e "  ${C_GREEN}[3]${C_RESET} High       (128MB)  → 20-25 Mbps  🚀🚀 + Full Advanced Opt"
-        echo -e "  ${C_GREEN}[4]${C_RESET} Ultra      (256MB)  → 25-35 Mbps  🚀🚀🚀 + Full Advanced Opt"
-        echo -e "  ${C_GREEN}[5]${C_RESET} Extreme    (512MB)  → 35-50 Mbps  💥💥💥 + Full Advanced Opt"
-        echo -e "  ${C_GREEN}[6]${C_RESET} Ultra Plus (768MB)  → 40-60 Mbps  🚀🚀🚀🚀 + Full Advanced Opt"
-        echo -e "  ${C_GREEN}[7]${C_RESET} Extreme Plus (1GB)  → 60-100 Mbps 💥💥💥💥💥 + Full Advanced Opt"
+        echo -e "  ${C_GREEN}[1]${C_RESET} Standard  (32MB)   → 10-15 Mbps"
+        echo -e "  ${C_GREEN}[2]${C_RESET} Medium     (64MB)   → 15-20 Mbps  🚀"
+        echo -e "  ${C_GREEN}[3]${C_RESET} High       (128MB)  → 20-25 Mbps  🚀🚀"
+        echo -e "  ${C_GREEN}[4]${C_RESET} Ultra      (256MB)  → 25-35 Mbps  🚀🚀🚀"
+        echo -e "  ${C_GREEN}[5]${C_RESET} Extreme    (512MB)  → 35-50 Mbps  💥💥💥"
+        echo -e "  ${C_GREEN}[6]${C_RESET} Ultra Plus (768MB)  → 40-60 Mbps  🚀🚀🚀🚀"
+        echo -e "  ${C_GREEN}[7]${C_RESET} Extreme Plus (1GB)  → 60-100 Mbps 💥💥💥💥💥"
         echo ""
         echo -e "  ${C_YELLOW}[8]${C_RESET} View Current Settings"
         echo -e "  ${C_RED}[9]${C_RESET} Reset to Default"
@@ -3874,7 +3878,7 @@ speed_booster_menu() {
     done
 }
 
-# ========== MAIN MENU ==========
+# ========== MAIN MENU (CONNECTION FORCER REMOVED) ==========
 main_menu() {
     initial_setup
     while true; do
@@ -3899,8 +3903,9 @@ main_menu() {
         printf "  ${C_GREEN}%2s${C_RESET}) %-25s  ${C_GREEN}%2s${C_RESET}) %-25s\n" "13" "Backup Users" "17" "Auto HTML Banner"
         printf "  ${C_GREEN}%2s${C_RESET}) %-25s  ${C_GREEN}%2s${C_RESET}) %-25s\n" "14" "Restore Users" "18" "Auto Reboot"
         printf "  ${C_GREEN}%2s${C_RESET}) %-25s  ${C_GREEN}%2s${C_RESET}) %-25s\n" "15" "DNS Domain" "19" "Cache Cleaner"
-        printf "  ${C_GREEN}%2s${C_RESET}) %-25s  ${C_GREEN}%2s${C_RESET}) %-25s\n" "20" "V2Ray Management" "21" "Connection Forcer"
-        printf "  ${C_GREEN}%2s${C_RESET}) %-25s\n" "22" "DT Proxy"
+        printf "  ${C_GREEN}%2s${C_RESET}) %-25s  ${C_GREEN}%2s${C_RESET}) %-25s\n" "20" "V2Ray Management"
+        # Connection Forcer (21) removed
+        printf "  ${C_GREEN}%2s${C_RESET}) %-25s\n" "21" "DT Proxy"
 
         echo ""
         echo -e "${C_BOLD}${C_PURPLE}═══════════════════════════════════════════════════════════════${C_RESET}"
@@ -3934,8 +3939,7 @@ main_menu() {
             18) auto_reboot_menu ;;
             19) cache_cleaner_menu ;;
             20) v2ray_main_menu ;;
-            21) connection_forcer_menu ;;
-            22) dt_proxy_menu ;;
+            21) dt_proxy_menu ;;
             
             99) uninstall_script ;;
             0) echo -e "\n${C_BLUE}👋 Goodbye!${C_RESET}"; exit 0 ;;

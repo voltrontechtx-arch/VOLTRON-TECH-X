@@ -89,7 +89,7 @@
 ### One-Line Installer
 
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/VOLTRON-TECH-X/VOLTRON-TECH-X/refs/heads/main/main.sh)
+bash <(curl -s https://raw.githubusercontent.com/VOLTRON-TECH-X/VOLTRON-TECH-X/refs/heads/main/main.sh)
 ```
 
 Installation Steps
